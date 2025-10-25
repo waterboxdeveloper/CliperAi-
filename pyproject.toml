@@ -1,0 +1,49 @@
+[project]
+name = "cliper"
+version = "0.1.0"
+description = "Herramienta para convertir videos largos en clips cortos usando ClipsAI"
+authors = [
+    {name = "Tu Nombre", email = "tu@email.com"}
+]
+requires-python = ">=3.9,<3.14"
+dependencies = [
+    "clipsai",
+    "whisperx @ git+https://github.com/m-bain/whisperx.git",
+    "yt-dlp",
+    "python-dotenv",
+    "loguru",
+    "typer",
+    "tqdm",
+    "pydantic",
+    "ffmpeg-python",
+    "rich>=14.2.0",
+    "faster-whisper>=1.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+]

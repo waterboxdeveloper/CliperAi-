@@ -1,0 +1,5 @@
+# Ignoro todos los archivos temporales
+*
+
+# Pero mantengo este .gitignore
+!.gitignore

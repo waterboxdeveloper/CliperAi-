@@ -1,0 +1,108 @@
+# Entorno virtual
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Archivos del proyecto (generados y procesados)
+downloads/           # Videos descargados de YouTube
+output/             # Clips finales procesados
+temp/               # Archivos temporales (transcripciones, audio, etc.)
+*.log
+logs/
+
+# Archivos de audio/video procesados
+*.mp4
+*.mp3
+*.wav
+*.avi
+*.mov
+*.mkv
+*.flv
+*.webm
+
+# Transcripciones y metadata
+*_transcript.json
+*_clips.json
+*_audio.wav
+project_state.json
+
+# Subtítulos generados
+*.srt
+*.vtt
+*.ass
+
+# Configuración sensible
+.env
+.env.local
+.env.production
+*.key
+*.pem
+
+# Cache y build
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Archivos temporales
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Modelos de ML (opcional - pueden ser grandes)
+models/
+*.pth
+*.pt
+*.bin
+
+# Archivos de prueba grandes
+test_videos/
+sample_data/
+
+# Documentación interna del desarrollo
+pasoxpaso/          # Carpeta de pasos del desarrollo
+docs/idea.md        # Notas de diseño internas
+.cursorrules        # Reglas de Cursor
+.cursor/            # Carpeta de configuración de Cursor
+comportamiento.md   # Archivo de comportamiento
+
+# Archivos específicos de desarrollo
+*.md.backup
+notes.txt
+todo.txt
+debug.log
+
+# Archivos de configuración local
+config.local.py
+settings.local.py
+
+# Archivos de usuario específicos
+user_config.json
+local_settings.json

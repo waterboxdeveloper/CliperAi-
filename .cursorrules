@@ -1,0 +1,330 @@
+# Cursor Rules - ClipsAI Video Clipper
+
+## Contexto del Proyecto
+Herramienta en Python que convierte videos largos de YouTube en clips cortos para TikTok/Instagram usando la librería ClipsAI.
+
+## Tu Comportamiento Como Asistente
+
+### Principio Fundamental
+El usuario quiere APRENDER mientras construye. Siempre explica el "por qué", no solo el "qué".
+
+### Al Explicar
+- Usa analogías simples
+- Divide conceptos complejos en pasos pequeños
+- Verifica comprensión antes de avanzar
+- Explica trade-offs de decisiones técnicas
+
+### Al Escribir Código
+- Código legible > código "clever"
+- Nombres en español para facilitar comprensión
+- Comentarios que explican lógica, no sintaxis
+- Justifica decisiones arquitectónicas
+
+---
+
+## Arquitectura del Proyecto
+
+### Estructura de Carpetas
+```
+src/
+├── downloader.py     # Descarga videos YouTube con yt-dlp
+├── transcriber.py    # Transcribe con WhisperX
+├── clipper.py        # Detecta clips con ClipsAI
+├── editor.py         # Corta clips del video
+├── resizer.py        # Redimensiona a 9:16
+├── pipeline.py       # Orquesta todo el flujo
+└── utils.py          # Funciones compartidas
+
+config/
+└── settings.py       # Configuración centralizada
+
+output/
+├── videos/           # Videos descargados
+├── transcriptions/   # Cache de transcripciones
+└── clips/            # Clips finales
+```
+
+### Flujo de Datos
+```
+URL → Descargar → Transcribir → Detectar Clips → Cortar → Redimensionar → Output
+```
+
+---
+
+## Convenciones de Código
+
+### Naming
+- Clases: `PascalCase` (VideoDownloader)
+- Funciones: `snake_case` (descargar_video)
+- Constantes: `UPPER_CASE` (MAX_CLIP_DURATION)
+- Variables: `snake_case` descriptivo (ruta_video_descargado)
+
+### Type Hints Siempre
+```python
+def descargar_video(url: str, carpeta_salida: Path) -> Path:
+    pass
+```
+
+### Docstrings en Español
+```python
+def procesar_clip(video: Path, inicio: float, fin: float) -> Path:
+    """
+    Extrae un segmento específico del video.
+    
+    Args:
+        video: Ruta al archivo de video
+        inicio: Tiempo de inicio en segundos
+        fin: Tiempo de fin en segundos
+        
+    Returns:
+        Ruta del clip generado
+        
+    Raises:
+        ArchivoNoEncontradoError: Si el video no existe
+    """
+```
+
+### Manejo de Errores
+- Siempre usa excepciones específicas, nunca `except:` vacío
+- Loguea errores con contexto útil
+- Propaga errores con información clara
+- Maneja casos edge (archivo no existe, URL inválida, etc)
+
+---
+
+## Stack Tecnológico
+
+### Dependencias Core (siempre usar estas)
+- `clipsai==0.2.1` - Detección de clips
+- `whisperx` - Transcripción con timestamps
+- `yt-dlp` - Descarga de YouTube
+- `pyannote.audio` - Diarización de speakers
+- `ffmpeg-python` - Procesamiento de video
+
+### Dependencias Auxiliares
+- `python-dotenv` - Variables de entorno
+- `loguru` - Logging mejorado
+- `typer` - CLI moderna
+- `tqdm` - Progress bars
+- `pydantic` - Validación de datos
+
+### NO usar
+- Alternativas a yt-dlp (pytube, youtube-dl)
+- FFmpeg wrappers diferentes (moviepy es muy lento)
+- Otros modelos de transcripción (solo WhisperX)
+
+---
+
+## Patterns y Arquitectura
+
+### Pipeline Pattern
+Usa una clase Pipeline que orquesta todo:
+```python
+class VideoPipeline:
+    def __init__(self):
+        self.downloader = VideoDownloader()
+        self.transcriber = VideoTranscriber()
+        self.clipper = ClipDetector()
+        self.editor = VideoEditor()
+        
+    def procesar(self, url: str) -> List[Path]:
+        # Ejecuta flujo completo
+```
+
+### Separación de Responsabilidades
+- Cada módulo hace UNA cosa
+- Sin dependencias circulares
+- Inyección de dependencias cuando sea necesario
+
+### Configuration Over Code
+- Todo configurable en settings.py
+- Variables de entorno para secrets
+- Valores por defecto sensatos
+
+### Fail Fast
+- Valida inputs al inicio
+- No proceses si algo está mal desde el principio
+- Errores claros y tempranos
+
+---
+
+## Reglas Específicas por Módulo
+
+### downloader.py
+- SIEMPRE validar URL antes de descargar
+- Usar yt-dlp con opciones optimizadas para velocidad
+- Guardar metadata del video (título, duración, etc)
+- Manejar: videos privados, geo-restricted, eliminados
+- Mostrar progreso de descarga con tqdm
+
+### transcriber.py
+- Implementar caché de transcripciones (JSON en disco)
+- Soportar idiomas: español, inglés, auto-detect
+- Usar modelo Whisper "base" por defecto (balance velocidad/precisión)
+- Timestamps a nivel de palabra, no solo segmento
+- Guardar transcripción en formato estructurado
+
+### clipper.py
+- Usar ClipFinder de ClipsAI (algoritmo TextTiling)
+- Filtrar clips por duración (min: 30s, max: 90s)
+- Permitir configurar sensibilidad de detección
+- Exportar metadata de cada clip (start, end, tema aproximado)
+- Manejar videos sin clips detectables
+
+### editor.py
+- Usar MediaEditor de ClipsAI cuando sea posible
+- Fallback a ffmpeg directo si falla ClipsAI
+- Mantener codec original (no re-encodear innecesariamente)
+- Limpiar archivos temporales después de procesar
+- Validar que clips generados no estén corruptos
+
+### resizer.py
+- Requiere token de Pyannote (desde variable de entorno)
+- Soportar aspect ratios: 9:16, 1:1, 4:5
+- Tracking inteligente del speaker
+- Optimizar para cada plataforma (bitrate, resolución)
+- Preservar calidad de audio
+
+---
+
+## Configuración
+
+### Variables de Entorno (.env)
+```
+PYANNOTE_TOKEN=hf_xxxxx
+OUTPUT_DIR=./output
+WHISPER_MODEL=base
+MIN_CLIP_DURATION=30
+MAX_CLIP_DURATION=90
+```
+
+### settings.py debe tener
+- Carga de .env con python-dotenv
+- Validación de configuración al inicio
+- Valores por defecto para todo
+- Documentación de cada variable
+
+---
+
+## Testing
+
+### Tests Unitarios
+- Mock de llamadas externas (YouTube, APIs)
+- Tests para cada función pública
+- Fixtures para datos de prueba
+- Usar pytest
+
+### Tests de Integración
+- Un test que corra pipeline completo con video corto de prueba
+- Validar outputs esperados
+- Medir performance
+
+---
+
+## Logging
+
+### Usa loguru con este formato
+```python
+from loguru import logger
+
+logger.info("Descargando video: {url}", url=youtube_url)
+logger.warning("Video muy largo, puede tardar: {duration}s", duration=3600)
+logger.error("Error al transcribir: {error}", error=str(e))
+```
+
+### Niveles
+- INFO: Operaciones normales (descarga iniciada, clip generado)
+- WARNING: Situaciones inusuales pero manejables (video muy largo)
+- ERROR: Errores recuperables (un clip falló, pero otros continúan)
+- CRITICAL: Errores que detienen todo (dependencia no instalada)
+
+---
+
+## Desarrollo Incremental
+
+### Orden de implementación
+1. Downloader (más simple, valida que todo funciona)
+2. Transcriber (núcleo del sistema)
+3. Clipper (usa transcripción)
+4. Editor (usa clips detectados)
+5. Resizer (polish final)
+6. Pipeline (integra todo)
+7. CLI (interfaz de usuario)
+
+### Cada paso debe
+- Funcionar independientemente
+- Tener tests básicos
+- Estar documentado
+- Ser revisado y comprendido por el usuario antes de continuar
+
+---
+
+## Performance
+
+### Consideraciones
+- WhisperX es LENTO en CPU (10-15 min para 1 hora de video)
+- Considerar GPU si está disponible (5x más rápido)
+- Caché es CRÍTICO (no re-transcribir mismo video)
+- Procesamiento paralelo de clips cuando sea posible
+
+### Optimizaciones
+- Lazy loading de dependencias pesadas (WhisperX, ClipsAI)
+- Streaming en lugar de cargar video completo
+- Compresión inteligente de outputs
+- Limpiar archivos temporales agresivamente
+
+---
+
+## Limitaciones Conocidas
+
+### ClipsAI
+- Solo funciona bien con contenido narrativo (podcasts, entrevistas)
+- No sirve para música, gaming sin comentario, videos sin diálogo
+- Mejor con inglés que otros idiomas
+- Requiere mínimo 5-10 minutos de contenido
+
+### WhisperX
+- Requiere >4GB RAM
+- CPU lento, GPU recomendado
+- Precisión variable según calidad de audio
+- Algunos acentos menos precisos
+
+### General
+- Requiere FFmpeg instalado en sistema
+- Videos muy largos (>2 horas) pueden requerir mucha RAM
+- Pyannote requiere registro en HuggingFace
+
+---
+
+## Debugging
+
+### Si descarga falla
+- Verificar URL válida
+- Probar video en navegador
+- Revisar yt-dlp está actualizado
+- Verificar espacio en disco
+
+### Si transcripción falla
+- Verificar FFmpeg instalado
+- Comprobar video tiene audio
+- Probar con modelo Whisper más pequeño ("tiny")
+- Verificar RAM disponible
+
+### Si clips no se detectan
+- Verificar transcripción tiene contenido
+- Video puede ser muy corto (<5 min)
+- Ajustar parámetros de sensibilidad
+- Contenido puede no ser narrativo
+
+---
+
+## Recordatorios Finales
+
+- SIEMPRE explica antes de implementar
+- Código debe ser LEGIBLE, no clever
+- Valida inputs SIEMPRE
+- Loguea operaciones importantes
+- Maneja errores ESPECÍFICAMENTE
+- Tests para funcionalidad crítica
+- Documenta decisiones no obvias
+- Usuario debe ENTENDER qué hace cada parte
