@@ -92,6 +92,7 @@ docs/idea.md        # Notas de diseño internas
 .cursorrules        # Reglas de Cursor
 .cursor/            # Carpeta de configuración de Cursor
 comportamiento.md   # Archivo de comportamiento
+.cursor/rules/      # Reglas específicas de Cursor
 
 # Archivos específicos de desarrollo
 *.md.backup
