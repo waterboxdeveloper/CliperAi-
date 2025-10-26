@@ -852,8 +852,8 @@ def opcion_exportar_clips(video: Dict, state_manager):
         style_options.add_row("2", "Bold (22px)", "Bold white text")
         style_options.add_row("3", "Yellow (20px)", "Yellow text (classic)")
         style_options.add_row("4", "TikTok (20px)", "Centered top")
-        style_options.add_row("5", "Small (16px)", "Subtle, small text")
-        style_options.add_row("6", "Tiny (12px)", "Very small text")
+        style_options.add_row("5", "Small (10px)", "Very small, positioned higher")
+        style_options.add_row("6", "Tiny (8px)", "Extra tiny, positioned higher")
 
         console.print(style_options)
         console.print()

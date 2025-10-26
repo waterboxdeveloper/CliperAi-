@@ -285,11 +285,12 @@ class VideoExporter:
             String de filtro para ffmpeg
         """
         # Estilos predefinidos para subtítulos
+        # TODOS con texto AMARILLO para máxima visibilidad
         styles = {
             "default": {
                 "FontName": "Arial",
-                "FontSize": "18",  # Reducido de 24 a 18
-                "PrimaryColour": "&H00FFFFFF",  # Blanco
+                "FontSize": "18",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",  # Negro
                 "Outline": "2",
                 "Shadow": "1",
@@ -297,17 +298,17 @@ class VideoExporter:
             },
             "bold": {
                 "FontName": "Arial",
-                "FontSize": "22",  # Reducido de 28 a 22
-                "PrimaryColour": "&H00FFFFFF",
+                "FontSize": "22",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",
-                "Outline": "2",  # Reducido de 3 a 2
-                "Shadow": "1",   # Reducido de 2 a 1
+                "Outline": "2",
+                "Shadow": "1",
                 "Bold": "-1"
             },
             "yellow": {
                 "FontName": "Arial",
-                "FontSize": "20",  # Reducido de 26 a 20
-                "PrimaryColour": "&H0000FFFF",  # Amarillo
+                "FontSize": "20",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",
                 "Outline": "2",
                 "Shadow": "1",
@@ -315,31 +316,35 @@ class VideoExporter:
             },
             "tiktok": {
                 "FontName": "Arial",
-                "FontSize": "20",  # Reducido MUCHO de 32 a 20
-                "PrimaryColour": "&H00FFFFFF",
+                "FontSize": "20",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",
-                "Outline": "2",  # Reducido de 4 a 2
-                "Shadow": "2",   # Reducido de 3 a 2
+                "Outline": "2",
+                "Shadow": "2",
                 "Bold": "-1",
                 "Alignment": "10"  # Centro arriba
             },
             "small": {
                 "FontName": "Arial",
-                "FontSize": "16",  # Muy pequeño
-                "PrimaryColour": "&H00FFFFFF",
+                "FontSize": "10",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",
                 "Outline": "1",
                 "Shadow": "1",
-                "Bold": "0"
+                "Bold": "0",
+                "Alignment": "6",  # Centro medio-arriba
+                "MarginV": "100"
             },
             "tiny": {
                 "FontName": "Arial",
-                "FontSize": "12",  # Extra pequeño
-                "PrimaryColour": "&H00FFFFFF",
+                "FontSize": "8",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",
                 "Outline": "1",
                 "Shadow": "0",
-                "Bold": "0"
+                "Bold": "0",
+                "Alignment": "6",  # Centro medio-arriba
+                "MarginV": "100"
             }
         }
 
@@ -358,6 +363,9 @@ class VideoExporter:
 
         if "Alignment" in selected_style:
             subtitle_filter += f",Alignment={selected_style['Alignment']}"
+
+        if "MarginV" in selected_style:
+            subtitle_filter += f",MarginV={selected_style['MarginV']}"
 
         subtitle_filter += "'"
 
