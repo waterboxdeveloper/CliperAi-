@@ -39,6 +39,9 @@ project_state.json
 *.vtt
 *.ass
 
+# AI Copy Generation (JSONs generados por IA)
+*_copys.json         # JSONs de copies generados (pueden regenerarse vía API)
+
 # Configuración sensible
 .env
 .env.local
@@ -54,6 +57,10 @@ build/
 dist/
 *.egg-info/
 *.egg
+
+# Tests
+tests/__pycache__/
+tests/*.pyc
 
 # IDEs
 .vscode/
@@ -77,10 +84,14 @@ Desktop.ini
 *.backup
 
 # Modelos de ML (opcional - pueden ser grandes)
-models/
+# NOTE: Only ignore ML model files, NOT src/models/ directory (contains code)
 *.pth
 *.pt
 *.bin
+*.onnx
+*.h5
+*.pkl
+*.joblib
 
 # Archivos de prueba grandes
 test_videos/
@@ -89,6 +100,7 @@ sample_data/
 # Documentación interna del desarrollo
 pasoxpaso/          # Carpeta de pasos del desarrollo
 docs/idea.md        # Notas de diseño internas
+docs/idea2.md       # Feature spec AI Copy Generation (documentación interna)
 .cursorrules        # Reglas de Cursor
 .cursor/            # Carpeta de configuración de Cursor
 comportamiento.md   # Archivo de comportamiento

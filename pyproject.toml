@@ -18,6 +18,8 @@ dependencies = [
     "ffmpeg-python",
     "rich>=14.2.0",
     "faster-whisper>=1.2.0",
+    "langchain-google-genai>=2.1.12",
+    "langgraph>=0.6.11",
 ]
 
 [project.optional-dependencies]

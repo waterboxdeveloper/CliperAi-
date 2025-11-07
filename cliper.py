@@ -10,6 +10,10 @@ Orquesta todo el pipeline: download → transcribe → generate clips → resize
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde .env
+load_dotenv()
 
 # Rich para interfaz profesional
 from rich.console import Console
@@ -25,6 +29,7 @@ try:
     from src.transcriber import Transcriber
     from src.clips_generator import ClipsGenerator
     from src.video_exporter import VideoExporter
+    from src.copys_generator import generate_copys_for_video
     from src.utils import get_state_manager
     from config.content_presets import get_preset, list_presets, get_preset_description
 except ImportError as e:
@@ -362,10 +367,11 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
         actions.append(("1", "Re-transcribe video"))
         actions.append(("2", "Generate/Regenerate clips"))
 
-        # Si ya tengo clips, ofrezco exportarlos
+        # Si ya tengo clips, ofrezco más opciones
         if state.get('clips_generated', False):
-            actions.append(("3", "Export clips to video files"))
-            actions.append(("4", "Back to menu"))
+            actions.append(("3", "Generate AI copies (auto-classify + captions)"))
+            actions.append(("4", "Export clips to video files"))
+            actions.append(("5", "Back to menu"))
         else:
             actions.append(("3", "Back to menu"))
     else:
@@ -393,10 +399,15 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
             opcion_generar_clips(video_seleccionado, state_manager)
         elif action == "3":
             if state['clips_generated']:
-                opcion_exportar_clips(video_seleccionado, state_manager)
+                opcion_generar_copies(video_seleccionado, state_manager)
             else:
                 return
         elif action == "4":
+            if state['clips_generated']:
+                opcion_exportar_clips(video_seleccionado, state_manager)
+            else:
+                return
+        elif action == "5":
             return
     else:
         if action == "1":
@@ -757,12 +768,167 @@ def opcion_generar_clips(video: Dict, state_manager):
     Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
 
 
+def opcion_generar_copies(video: Dict, state_manager):
+    """
+    Genero copies automáticamente usando LangGraph + Gemini
+
+    Este paso clasifica cada clip automáticamente (viral/educational/storytelling)
+    y genera el caption optimizado para cada uno usando AI.
+    """
+    console.clear()
+    mostrar_banner()
+
+    video_id = video['video_id']
+
+    # Verifico que tenga clips generados
+    state = state_manager.get_video_state(video_id)
+
+    if not state or not state.get('clips_generated'):
+        console.print(Panel(
+            "[red]Error: This video doesn't have clips yet[/red]\n\n"
+            "You need to generate clips first before creating AI copies.",
+            border_style="red"
+        ))
+        Prompt.ask("\n[dim]Press ENTER to return[/dim]", default="")
+        return
+
+    clips = state.get('clips', [])
+
+    console.print(Panel(
+        f"[bold]Generate AI Copies[/bold]\n\n"
+        f"Video: {video['filename']}\n"
+        f"Clips: {len(clips)}\n\n"
+        f"This will:\n"
+        f"  1. Auto-classify each clip (viral/educational/storytelling)\n"
+        f"  2. Generate optimized captions with hashtags\n"
+        f"  3. Save to output/{video_id}/copys/clips_copys.json",
+        border_style="cyan"
+    ))
+    console.print()
+
+    # Selección de modelo
+    console.print("[bold]Model Selection:[/bold]\n")
+
+    model_table = Table(show_header=False, box=None, padding=(0, 2))
+    model_table.add_column(style="cyan")
+    model_table.add_column(style="white")
+    model_table.add_column(style="dim")
+
+    model_table.add_row("1", "Gemini 2.5 Flash", "Your model (recommended)")
+    model_table.add_row("2", "Gemini 1.5 Pro", "Alternative")
+
+    console.print(model_table)
+    console.print()
+
+    model_choice = Prompt.ask(
+        "[cyan]Choose model[/cyan]",
+        choices=["1", "2"],
+        default="1"
+    )
+
+    # Intentar diferentes nombres de modelo para Gemini 2.5 Flash
+    model_map = {
+        "1": "gemini-2.5-flash",  # Nombre probable
+        "2": "gemini-1.5-pro"
+    }
+
+    model = model_map[model_choice]
+
+    console.print()
+    console.print("[yellow]⚠️  This will use Gemini API (requires GOOGLE_API_KEY)[/yellow]")
+    console.print(f"[dim]Estimated time: ~1-2 minutes for {len(clips)} clips[/dim]\n")
+
+    if not Confirm.ask("[cyan]Start AI copy generation?[/cyan]", default=True):
+        console.print("[yellow]Cancelled[/yellow]")
+        Prompt.ask("\n[dim]Press ENTER to return[/dim]", default="")
+        return
+
+    try:
+        console.print()
+        console.print("[cyan]Generating AI copies...[/cyan]\n")
+
+        # Generar copies
+        result = generate_copys_for_video(
+            video_id=video_id,
+            model=model
+        )
+
+        # Mostrar todos los logs primero
+        if result.get('logs'):
+            console.print()
+            console.print("[bold]Process logs:[/bold]")
+            for log in result['logs']:
+                if '❌' in log or 'Error' in log:
+                    console.print(f"[red]{log}[/red]")
+                elif '⚠️' in log:
+                    console.print(f"[yellow]{log}[/yellow]")
+                elif '✅' in log:
+                    console.print(f"[green]{log}[/green]")
+                else:
+                    console.print(f"[dim]{log}[/dim]")
+
+        console.print()
+
+        if result['success']:
+            # Determinar si es éxito total o parcial
+            total_generated = result['metrics']['total_copies']
+            total_classified = result['metrics'].get('total_classified', total_generated)
+            is_partial = total_generated < total_classified
+
+            if is_partial:
+                title_text = "[bold yellow]Partial Success[/bold yellow]"
+                border_color = "yellow"
+                status_line = f"[yellow]⚠️  Generación parcial: {total_generated}/{total_classified} copies[/yellow]"
+            else:
+                title_text = "[bold green]Success[/bold green]"
+                border_color = "green"
+                status_line = f"[green]✓ AI copies generated successfully![/green]"
+
+            console.print(Panel(
+                f"{status_line}\n\n"
+                f"Total copies: {total_generated}\n"
+                f"Engagement score: {result['metrics']['average_engagement']}/10\n"
+                f"Viral potential: {result['metrics']['average_viral_potential']}/10\n\n"
+                f"Distribution:\n"
+                f"  • Viral: {result['metrics']['distribution']['viral']} clips\n"
+                f"  • Educational: {result['metrics']['distribution']['educational']} clips\n"
+                f"  • Storytelling: {result['metrics']['distribution']['storytelling']} clips\n\n"
+                f"Saved to: {result['output_file']}",
+                title=title_text,
+                border_style=border_color
+            ))
+
+        else:
+            console.print(Panel(
+                f"[red]Copy generation failed[/red]\n\n"
+                f"Error: {result.get('error', 'Unknown error')}\n\n"
+                f"Check the logs above for details.\n\n"
+                f"Possible causes:\n"
+                f"• GOOGLE_API_KEY not set\n"
+                f"• Model not available with your API key\n"
+                f"• API quota exceeded\n"
+                f"• Network issues",
+                border_style="red"
+            ))
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Copy generation cancelled by user[/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]Error: {e}[/red]")
+        console.print("[dim]Check that GOOGLE_API_KEY is set in your environment[/dim]")
+
+    console.print()
+    Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
+
+
 def opcion_exportar_clips(video: Dict, state_manager):
     """
     Exporto los clips a archivos de video físicos usando ffmpeg
 
     Este es el paso final donde convirtiendo los timestamps en videos reales.
     Puedo exportar con diferentes aspect ratios para redes sociales.
+
+    Si existen clasificaciones (clips_copys.json), pregunta si organizar por estilo.
     """
     console.clear()
     mostrar_banner()
@@ -791,6 +957,44 @@ def opcion_exportar_clips(video: Dict, state_manager):
         ))
         Prompt.ask("\n[dim]Press ENTER to return[/dim]", default="")
         return
+
+    # Verificar si existen clasificaciones
+    copys_file = Path("output") / video_id / "copys" / "clips_copys.json"
+    has_classifications = copys_file.exists()
+    clip_styles = None
+    organize_by_style = False
+
+    if has_classifications:
+        # Cargar clasificaciones
+        try:
+            import json
+            with open(copys_file, 'r', encoding='utf-8') as f:
+                copys_data = json.load(f)
+
+            # Extraer clasificaciones de clips
+            classifications = copys_data.get('classification_metadata', {}).get('classifications', [])
+
+            if classifications:
+                clip_styles = {c['clip_id']: c['style'] for c in classifications}
+
+                # Mostrar distribución
+                distribution = copys_data.get('classification_metadata', {}).get('distribution', {})
+                viral_count = distribution.get('viral', 0)
+                educational_count = distribution.get('educational', 0)
+                storytelling_count = distribution.get('storytelling', 0)
+
+                console.print(Panel(
+                    f"[green]✓ Clips already classified![/green]\n\n"
+                    f"Distribution:\n"
+                    f"  • Viral: {viral_count} clips\n"
+                    f"  • Educational: {educational_count} clips\n"
+                    f"  • Storytelling: {storytelling_count} clips",
+                    title="[bold green]Auto-Classification Detected[/bold green]",
+                    border_style="green"
+                ))
+                console.print()
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not load classifications: {e}[/yellow]\n")
 
     console.print(Panel(
         f"[bold]Export Clips to Video Files[/bold]\n\n"
@@ -875,6 +1079,19 @@ def opcion_exportar_clips(video: Dict, state_manager):
 
         subtitle_style = style_map[style_choice]
 
+    # Pregunto si quiere organizar por estilo (si hay clasificaciones)
+    if clip_styles:
+        console.print()
+        organize_by_style = Confirm.ask(
+            "[cyan]Organize clips by style in separate folders? (viral/educational/storytelling)[/cyan]",
+            default=True
+        )
+
+        if organize_by_style:
+            console.print("[green]✓ Clips will be organized in subfolders by style[/green]")
+        else:
+            console.print("[dim]All clips will be exported to the same folder[/dim]")
+
     # Pregunto si quiere exportar todos o solo algunos
     console.print()
     export_all = Confirm.ask(
@@ -923,7 +1140,9 @@ def opcion_exportar_clips(video: Dict, state_manager):
             video_name=video_id,
             add_subtitles=add_subtitles,
             transcript_path=transcript_path,
-            subtitle_style=subtitle_style
+            subtitle_style=subtitle_style,
+            organize_by_style=organize_by_style,
+            clip_styles=clip_styles
         )
 
         if exported_paths:

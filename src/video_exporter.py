@@ -68,7 +68,9 @@ class VideoExporter:
         video_name: Optional[str] = None,
         add_subtitles: bool = False,
         transcript_path: Optional[str] = None,
-        subtitle_style: str = "default"
+        subtitle_style: str = "default",
+        organize_by_style: bool = False,
+        clip_styles: Optional[Dict[int, str]] = None
     ) -> List[str]:
         """
         Exporto todos los clips de un video
@@ -81,6 +83,8 @@ class VideoExporter:
             add_subtitles: Si True, quema subtítulos en el video
             transcript_path: Ruta al archivo de transcripción (requerido si add_subtitles=True)
             subtitle_style: Estilo de subtítulos ("default", "bold", "yellow")
+            organize_by_style: Si True, organiza clips en subcarpetas por estilo
+            clip_styles: Dict mapping clip_id → style ("viral", "educational", "storytelling")
 
         Returns:
             Lista de rutas a los clips exportados
@@ -110,11 +114,22 @@ class VideoExporter:
             )
 
             for clip in clips:
+                # Determinar carpeta de salida según estilo (si aplica)
+                clip_output_dir = video_output_dir
+
+                if organize_by_style and clip_styles:
+                    clip_id = clip['clip_id']
+                    style = clip_styles.get(clip_id, 'unclassified')
+
+                    # Crear subcarpeta por estilo
+                    clip_output_dir = video_output_dir / style
+                    clip_output_dir.mkdir(parents=True, exist_ok=True)
+
                 clip_path = self._export_single_clip(
                     video_path=video_path,
                     clip=clip,
                     video_name=video_name,
-                    output_dir=video_output_dir,
+                    output_dir=clip_output_dir,
                     aspect_ratio=aspect_ratio,
                     add_subtitles=add_subtitles,
                     transcript_path=transcript_path,
@@ -157,17 +172,15 @@ class VideoExporter:
         end_time = clip['end_time']
         duration = end_time - start_time
 
-        # Nombre del archivo de salida
-        aspect_suffix = f"_{aspect_ratio.replace(':', 'x')}" if aspect_ratio else ""
-        subs_suffix = "_subs" if add_subtitles else ""
-        output_filename = f"{video_name}_clip_{clip_id:03d}{aspect_suffix}{subs_suffix}.mp4"
+        # Nombre del archivo de salida (simple: 1.mp4, 2.mp4, etc.)
+        output_filename = f"{clip_id}.mp4"
         output_path = output_dir / output_filename
 
         # Genero subtítulos si se requiere
         subtitle_file = None
         if add_subtitles and transcript_path:
-            # Genero archivo SRT para este clip específico
-            subtitle_filename = f"{video_name}_clip_{clip_id:03d}.srt"
+            # Genero archivo SRT para este clip específico (también con nombre simple)
+            subtitle_filename = f"{clip_id}.srt"
             subtitle_file = output_dir / subtitle_filename
 
             self.subtitle_generator.generate_srt_for_clip(
