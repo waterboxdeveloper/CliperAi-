@@ -169,3 +169,201 @@ WhisperX can be significantly faster when utilizing a GPU. To enable GPU support
 -   **Updates**: To update CLIPER or its dependencies, you'll need to pull the latest code, update `uv.lock` (if dependencies changed), and rebuild the Docker image (`docker-compose build`).
 
 This setup provides a robust and reproducible environment for running CLIPER.
+
+## 7. Sharing Your Dockerized CLIPER
+
+There are two main ways to share your dockerized CLIPER project with others:
+
+### 7.1 Method 1: Share via Docker Hub (Recommended)
+
+This method allows others to pull your pre-built image without building it themselves.
+
+**On your machine (sharing the image):**
+
+```bash
+# 1. Tag your image with your Docker Hub username
+docker tag cliper_app <your-dockerhub-username>/cliper:latest
+
+# 2. Log in to Docker Hub
+docker login
+
+# 3. Push the image to Docker Hub
+docker push <your-dockerhub-username>/cliper:latest
+```
+
+**On another PC (replicating the CLI):**
+
+```bash
+# 1. Pull the image from Docker Hub
+docker pull <your-dockerhub-username>/cliper:latest
+
+# 2. Run CLIPER directly
+docker run -it --rm \
+  -e GOOGLE_API_KEY="your_api_key_here" \
+  -v $(pwd):/app \
+  -v cliper_whisper_models:/root/.cache/whisperx \
+  <your-dockerhub-username>/cliper:latest
+```
+
+### 7.2 Method 2: Share Project Files (For Developers)
+
+This method allows others to build the image from source and modify the code.
+
+**Files to share:**
+- `Dockerfile`
+- `docker-compose.yml`
+- `pyproject.toml`
+- `.dockerignore`
+- `cliper.py` and all source code
+- `config/` directory (if needed)
+
+**On another PC (replicating the CLI):**
+
+```bash
+# 1. Clone or copy the project files
+# (If using git)
+git clone <your-repo-url>
+cd Cliper
+
+# 2. Create a .env file or set your API key in docker-compose.yml
+# Edit docker-compose.yml and replace the GOOGLE_API_KEY value
+
+# 3. Build the Docker image
+docker-compose build
+
+# 4. Run CLIPER
+docker-compose run cliper
+
+# 5. Or run specific commands
+docker-compose run cliper uv run cliper.py --help
+```
+
+### 7.3 Method 3: Export/Import Docker Image as File
+
+Useful when you can't use Docker Hub or don't want to rebuild.
+
+**On your machine (export the image):**
+
+```bash
+# 1. Build the image first
+docker-compose build
+
+# 2. Export the image to a tar file
+docker save -o cliper-app.tar cliper_app
+
+# 3. Share the cliper-app.tar file (will be large, ~2-3GB)
+# Also share docker-compose.yml
+```
+
+**On another PC (import the image):**
+
+```bash
+# 1. Load the image from the tar file
+docker load -i cliper-app.tar
+
+# 2. Use docker-compose to run (make sure you have docker-compose.yml)
+docker-compose run cliper
+
+# Or run directly with docker
+docker run -it --rm \
+  -e GOOGLE_API_KEY="your_api_key_here" \
+  -v $(pwd):/app \
+  -v cliper_whisper_models:/root/.cache/whisperx \
+  cliper_app
+```
+
+## 8. Complete Example: Setting Up CLIPER on a New PC
+
+Here's a complete walkthrough for someone replicating your CLI tool:
+
+### Scenario: Your colleague wants to use CLIPER on their machine
+
+**Prerequisites on the new PC:**
+- Docker installed
+- Docker Compose installed
+
+**Step 1: Get the project files**
+
+```bash
+# Option A: Clone from git
+git clone https://github.com/yourusername/Cliper.git
+cd Cliper
+
+# Option B: Download and extract the project zip
+unzip Cliper.zip
+cd Cliper
+```
+
+**Step 2: Configure API key**
+
+```bash
+# Edit docker-compose.yml and add your Google API key
+# OR create a .env file:
+echo "GOOGLE_API_KEY=your_actual_api_key_here" > .env
+
+# Then update docker-compose.yml to use:
+# GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+```
+
+**Step 3: Build and run**
+
+```bash
+# Build the image (first time only, takes 5-10 minutes)
+docker-compose build
+
+# Run CLIPER
+docker-compose run cliper
+
+# Or run a specific command
+docker-compose run cliper uv run cliper.py --download https://youtube.com/watch?v=example
+```
+
+**Step 4: Access outputs**
+
+All generated files (videos, subtitles, etc.) will appear in your local project directories:
+- `output/` - processed videos and subtitles
+- `downloads/` - downloaded videos
+- `temp/` - temporary files
+
+**Step 5: GPU support (optional)**
+
+If the new PC has an NVIDIA GPU:
+
+```bash
+# 1. Install NVIDIA Container Toolkit
+# Follow: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+
+# 2. Uncomment GPU lines in docker-compose.yml (lines 28-34)
+
+# 3. Rebuild
+docker-compose build
+
+# 4. Run with GPU acceleration
+docker-compose run cliper
+```
+
+### Quick Reference Commands
+
+```bash
+# Build the image
+docker-compose build
+
+# Run CLIPER interactively
+docker-compose run cliper
+
+# Get help
+docker-compose run cliper uv run cliper.py --help
+
+# Download a video
+docker-compose run cliper uv run cliper.py --download <url>
+
+# Process local video
+docker-compose run cliper uv run cliper.py --input videos/myvideo.mp4
+
+# Stop all containers
+docker-compose down
+
+# Clean up everything (containers, images, volumes)
+docker-compose down -v
+docker system prune -a
+```

@@ -333,87 +333,98 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
     video_seleccionado = videos[int(seleccion) - 1]
     video_id = video_seleccionado['video_id']
 
-    # Obtengo el estado del video
-    state = state_manager.get_video_state(video_id)
+    # Loop infinito para refrescar el menu después de cada acción
+    while True:
+        # Obtengo el estado del video (refrescado en cada iteración)
+        state = state_manager.get_video_state(video_id)
 
-    # Muestro opciones según el estado
-    console.print(f"\n[bold]Processing: {video_seleccionado['filename']}[/bold]\n")
+        # Limpio la pantalla y muestro banner
+        console.clear()
+        mostrar_banner()
 
-    # Muestro el estado actual
-    if state:
-        status_parts = []
-        if state['transcribed']:
-            status_parts.append("[green]✓ Transcribed[/green]")
-        if state['clips_generated']:
-            num_clips = len(state.get('clips', []))
-            status_parts.append(f"[green]✓ {num_clips} clips generated[/green]")
-        if state.get('clips_exported', False):
-            num_exported = len(state.get('exported_clips', []))
-            aspect = state.get('export_aspect_ratio', 'original')
-            status_parts.append(f"[green]✓ {num_exported} clips exported ({aspect})[/green]")
+        # Muestro opciones según el estado
+        console.print(f"\n[bold]Processing: {video_seleccionado['filename']}[/bold]\n")
 
-        if status_parts:
-            console.print("Status: " + " | ".join(status_parts))
-            console.print()
+        # Muestro el estado actual
+        if state:
+            status_parts = []
+            if state['transcribed']:
+                status_parts.append("[green]✓ Transcribed[/green]")
+            if state['clips_generated']:
+                num_clips = len(state.get('clips', []))
+                status_parts.append(f"[green]✓ {num_clips} clips generated[/green]")
+            if state.get('clips_exported', False):
+                num_exported = len(state.get('exported_clips', []))
+                aspect = state.get('export_aspect_ratio', 'original')
+                status_parts.append(f"[green]✓ {num_exported} clips exported ({aspect})[/green]")
 
-    # Creo menú de acciones disponibles
-    actions_table = Table(show_header=False, box=box.ROUNDED, border_style="cyan", padding=(0, 2))
-    actions_table.add_column("Option", style="bold cyan", width=8)
-    actions_table.add_column("Description", style="white")
+            if status_parts:
+                console.print("Status: " + " | ".join(status_parts))
+                console.print()
 
-    actions = []
+        # Creo menú de acciones disponibles
+        actions_table = Table(show_header=False, box=box.ROUNDED, border_style="cyan", padding=(0, 2))
+        actions_table.add_column("Option", style="bold cyan", width=8)
+        actions_table.add_column("Description", style="white")
 
-    if state and state['transcribed']:
-        actions.append(("1", "Re-transcribe video"))
-        actions.append(("2", "Generate/Regenerate clips"))
+        actions = []
 
-        # Si ya tengo clips, ofrezco más opciones
-        if state.get('clips_generated', False):
-            actions.append(("3", "Generate AI copies (auto-classify + captions)"))
-            actions.append(("4", "Export clips to video files"))
-            actions.append(("5", "Back to menu"))
+        if state and state['transcribed']:
+            actions.append(("1", "Re-transcribe video"))
+            actions.append(("2", "Generate/Regenerate clips"))
+
+            # Si ya tengo clips, ofrezco más opciones
+            if state.get('clips_generated', False):
+                actions.append(("3", "Generate AI copies (auto-classify + captions)"))
+                actions.append(("4", "Export clips to video files"))
+                actions.append(("5", "Back to menu"))
+            else:
+                actions.append(("3", "Back to menu"))
         else:
-            actions.append(("3", "Back to menu"))
-    else:
-        actions.append(("1", "Transcribe video"))
-        actions.append(("2", "Back to menu"))
+            actions.append(("1", "Transcribe video"))
+            actions.append(("2", "Back to menu"))
 
-    for option, desc in actions:
-        actions_table.add_row(option, desc)
+        for option, desc in actions:
+            actions_table.add_row(option, desc)
 
-    console.print(actions_table)
-    console.print()
+        console.print(actions_table)
+        console.print()
 
-    choices = [opt for opt, _ in actions]
-    action = Prompt.ask(
-        "[bold cyan]Choose an action[/bold cyan]",
-        choices=choices,
-        default=choices[0]
-    )
+        choices = [opt for opt, _ in actions]
+        action = Prompt.ask(
+            "[bold cyan]Choose an action[/bold cyan]",
+            choices=choices,
+            default=choices[0]
+        )
 
-    # Ejecuto la acción elegida
-    if state and state['transcribed']:
-        if action == "1":
-            opcion_transcribir_video(video_seleccionado, state_manager)
-        elif action == "2":
-            opcion_generar_clips(video_seleccionado, state_manager)
-        elif action == "3":
-            if state['clips_generated']:
-                opcion_generar_copies(video_seleccionado, state_manager)
-            else:
-                return
-        elif action == "4":
-            if state['clips_generated']:
-                opcion_exportar_clips(video_seleccionado, state_manager)
-            else:
-                return
-        elif action == "5":
-            return
-    else:
-        if action == "1":
-            opcion_transcribir_video(video_seleccionado, state_manager)
-        elif action == "2":
-            return
+        # Ejecuto la acción elegida
+        if state and state['transcribed']:
+            if action == "1":
+                opcion_transcribir_video(video_seleccionado, state_manager)
+                # Continúa el loop para refrescar el menu
+            elif action == "2":
+                opcion_generar_clips(video_seleccionado, state_manager)
+                # Continúa el loop para refrescar el menu
+            elif action == "3":
+                if state['clips_generated']:
+                    opcion_generar_copies(video_seleccionado, state_manager)
+                    # Continúa el loop para refrescar el menu
+                else:
+                    return  # Back to main menu
+            elif action == "4":
+                if state['clips_generated']:
+                    opcion_exportar_clips(video_seleccionado, state_manager)
+                    # Continúa el loop para refrescar el menu
+                else:
+                    return  # Back to main menu
+            elif action == "5":
+                return  # Back to main menu
+        else:
+            if action == "1":
+                opcion_transcribir_video(video_seleccionado, state_manager)
+                # Continúa el loop para refrescar el menu
+            elif action == "2":
+                return  # Back to main menu
 
 
 def opcion_transcribir_video(video: Dict, state_manager):

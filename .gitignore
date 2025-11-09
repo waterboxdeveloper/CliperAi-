@@ -99,6 +99,7 @@ sample_data/
 
 # Documentación interna del desarrollo
 pasoxpaso/          # Carpeta de pasos del desarrollo
+pasoxpaso/docker.md # Documentación detallada de Docker (interno)
 docs/idea.md        # Notas de diseño internas
 docs/idea2.md       # Feature spec AI Copy Generation (documentación interna)
 .cursorrules        # Reglas de Cursor

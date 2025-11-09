@@ -76,6 +76,90 @@ python cliper.py
 
 ---
 
+## Docker Installation (Alternative)
+
+If you prefer using Docker, CLIPER can run in a containerized environment without installing dependencies locally.
+
+### Prerequisites
+
+- **Docker**: [Install Docker](https://docs.docker.com/engine/install/)
+- **Docker Compose**: [Install Docker Compose](https://docs.docker.com/compose/install/)
+
+### Quick Start with Docker
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/opino-tech/cliper.git
+cd cliper
+
+# 2. Set your Google API key in docker-compose.yml
+# Edit line 14 or create a .env file with:
+# GOOGLE_API_KEY=your_gemini_api_key_here
+
+# 3. Build the Docker image (first time only, takes 5-10 minutes)
+docker-compose build
+
+# 4. Run CLIPER
+docker-compose run cliper
+
+# 5. Or run specific commands
+docker-compose run cliper uv run cliper.py --help
+```
+
+### Replicating CLIPER on Another PC
+
+**Method 1: Using Docker Hub (Fastest)**
+
+```bash
+# On your machine - push image to Docker Hub
+docker tag cliper_app <your-dockerhub-username>/cliper:latest
+docker login
+docker push <your-dockerhub-username>/cliper:latest
+
+# On another PC - pull and run
+docker pull <your-dockerhub-username>/cliper:latest
+docker run -it --rm \
+  -e GOOGLE_API_KEY="your_api_key_here" \
+  -v $(pwd):/app \
+  <your-dockerhub-username>/cliper:latest
+```
+
+**Method 2: Using Project Files**
+
+```bash
+# On another PC
+git clone https://github.com/opino-tech/cliper.git
+cd cliper
+
+# Set your API key in docker-compose.yml
+docker-compose build
+docker-compose run cliper
+```
+
+### Docker Benefits
+
+- ✅ **No local dependencies**: FFmpeg, Python, WhisperX all in container
+- ✅ **Consistent environment**: Works the same on any machine
+- ✅ **Persistent models**: WhisperX models cached in Docker volume
+- ✅ **Easy sharing**: Push to Docker Hub, share with team
+
+### GPU Support (Optional)
+
+For faster transcription with NVIDIA GPUs:
+
+```bash
+# 1. Install NVIDIA Container Toolkit
+# Follow: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+
+# 2. Uncomment GPU lines in docker-compose.yml (lines 28-34)
+
+# 3. Rebuild and run
+docker-compose build
+docker-compose run cliper
+```
+
+---
+
 ## Usage Examples
 
 ### Download and Process a Video

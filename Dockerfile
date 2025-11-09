@@ -1,5 +1,5 @@
 # Use an official Python runtime as a parent image
-FROM python:3.10-slim-buster
+FROM python:3.10-slim-bullseye
 
 # Set the working directory in the container
 WORKDIR /app
@@ -10,17 +10,18 @@ WORKDIR /app
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
-    libmagic1 && \
+    libmagic1 \
+    git && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy pyproject.toml and uv.lock first to leverage Docker cache
-# uv.lock ensures reproducible builds
-COPY pyproject.toml uv.lock ./
+# Copy pyproject.toml first
+COPY pyproject.toml ./
 
 # Install Python dependencies using uv
 # uv is recommended for its speed and lock file management
+# Run uv sync inside the container to generate uv.lock and install dependencies
 RUN pip install uv && \
-    uv sync --system
+    uv sync
 
 # Copy the rest of your application code
 COPY . .
