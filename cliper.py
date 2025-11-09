@@ -481,7 +481,28 @@ def opcion_transcribir_video(video: Dict, state_manager):
         default="auto"
     )
 
-    if language.lower() == "auto":
+    # Mapeo de nombres comunes a códigos ISO (WhisperX espera códigos ISO)
+    LANGUAGE_MAP = {
+        "spanish": "es",
+        "español": "es",
+        "english": "en",
+        "inglés": "en",
+        "portuguese": "pt",
+        "português": "pt",
+        "french": "fr",
+        "francés": "fr",
+        "german": "de",
+        "alemán": "de",
+        "italian": "it",
+        "italiano": "it",
+        "auto": None
+    }
+
+    # Normalizar idioma
+    lang_lower = language.lower().strip()
+    if lang_lower in LANGUAGE_MAP:
+        language = LANGUAGE_MAP[lang_lower]
+    elif lang_lower == "auto":
         language = None  # WhisperX auto-detecta
 
     console.print()

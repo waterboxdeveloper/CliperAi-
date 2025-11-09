@@ -705,11 +705,21 @@ Responde SOLO con JSON válido (sin markdown):"""
 
         # Validar que todos los clips tengan copy
         total_clips = len(state['clips_data'])
+        success_rate = len(all_copies_sorted) / total_clips if total_clips > 0 else 0
+
+        # IMPORTANTE: SIEMPRE retornar all_copies (graceful degradation)
+        # La validación de threshold se hace en validate_structure_node
         if len(all_copies_sorted) != total_clips:
             missing = total_clips - len(all_copies_sorted)
+            missing_ids = [clip['clip_id'] for clip in state['clips_data']
+                          if clip['clip_id'] not in {c.clip_id for c in all_copies_sorted}]
+
             return {
-                "error_message": f"Faltan {missing} copies",
-                "logs": [f"⚠️ Solo {len(all_copies_sorted)}/{total_clips} copies generados"]
+                "all_copies": all_copies_sorted,  # ← CRÍTICO: retornar lo que tenemos
+                "logs": [
+                    f"⚠️ Generación parcial: {len(all_copies_sorted)}/{total_clips} copies ({success_rate:.0%})",
+                    f"   Clips faltantes: {missing_ids[:10]}{'...' if len(missing_ids) > 10 else ''}"
+                ]
             }
 
         return {
@@ -796,12 +806,26 @@ Responde SOLO con JSON válido (sin markdown):"""
 
         logs = []
 
+        # Threshold 60%: Mínimo aceptable para considerar éxito
+        MIN_SUCCESS_RATE = 0.60
+
         if count == 0:
             return {
                 "error_message": "No se generaron copies",
                 "logs": [
                     f"❌ Error: 0/{total_clips} copies generados",
                     f"   Verifica el modelo de Gemini y los logs anteriores"
+                ]
+            }
+
+        # Aplicar threshold: Si menos del 60% se generó, considerarlo fallo
+        if success_rate < MIN_SUCCESS_RATE:
+            return {
+                "error_message": f"Generación insuficiente: {count}/{total_clips} copies ({success_rate:.0%})",
+                "logs": [
+                    f"❌ Solo {success_rate:.0%} generado (mínimo requerido: {MIN_SUCCESS_RATE:.0%})",
+                    f"   {total_clips - count} clips fallaron - revisa logs de batches arriba",
+                    f"   Sugerencia: Espera 5 min y re-intenta (podría ser rate limiting 429)"
                 ]
             }
 
@@ -910,6 +934,19 @@ Responde SOLO con JSON válido (sin markdown):"""
 
             # Agregar metadata de clasificación
             saved_data = saved_copys.model_dump()
+
+            # Calcular si fue generación completa o parcial
+            total_clips = len(state['clips_data'])
+            generated_count = len(all_copies)
+            is_incomplete = generated_count < total_clips
+
+            # Identificar clips faltantes si es parcial
+            missing_clips = []
+            if is_incomplete:
+                generated_ids = {c.clip_id for c in all_copies}
+                missing_clips = [clip['clip_id'] for clip in state['clips_data']
+                                if clip['clip_id'] not in generated_ids]
+
             saved_data['classification_metadata'] = {
                 'classifications': classifications,
                 'distribution': {
@@ -917,6 +954,16 @@ Responde SOLO con JSON válido (sin markdown):"""
                     'educational': len(state['grouped_clips'].get('educational', [])),
                     'storytelling': len(state['grouped_clips'].get('storytelling', []))
                 }
+            }
+
+            # Agregar metadata de completitud (para debugging)
+            saved_data['generation_metadata'] = {
+                'incomplete': is_incomplete,
+                'total_clips': total_clips,
+                'generated_clips': generated_count,
+                'success_rate': round(generated_count / total_clips, 2) if total_clips > 0 else 0,
+                'missing_clips': missing_clips if is_incomplete else [],
+                'note': 'Partial generation - some batches failed during processing' if is_incomplete else 'Complete generation'
             }
 
             # Guardar JSON
