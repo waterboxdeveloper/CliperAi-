@@ -64,7 +64,7 @@ dev:
 
 # Start in production mode (detached)
 prod:
-	@echo "🚀 Starting CLIPER in production mode (detached)..."
+	@echo " Starting CLIPER in production mode (detached)..."
 	docker-compose up -d
 	@echo "✅ CLIPER is running in the background"
 	@echo "📋 View logs: make logs"
