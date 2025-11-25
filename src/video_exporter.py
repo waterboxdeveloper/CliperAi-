@@ -210,7 +210,12 @@ class VideoExporter:
         # Filtro de subtítulos (quemados en el video)
         if add_subtitles and subtitle_file and subtitle_file.exists():
             # Escapo el path del subtitle para ffmpeg
-            subtitle_path_escaped = str(subtitle_file).replace('\\', '\\\\').replace(':', '\\:')
+            # Para paths con espacios/caracteres especiales, FFmpeg requiere:
+            # 1. Escapar backslashes y dos puntos
+            # 2. Luego wrap con comillas simples en el filtro
+            subtitle_path_str = str(subtitle_file)
+            # Solo escapamos \ y : - las comillas se agregan en _get_subtitle_filter
+            subtitle_path_escaped = subtitle_path_str.replace('\\', '\\\\').replace(':', '\\:')
 
             # Obtengo el estilo de subtítulos
             subtitle_filter = self._get_subtitle_filter(subtitle_path_escaped, subtitle_style)
@@ -365,7 +370,8 @@ class VideoExporter:
 
         # Construyo el filtro subtitles con el estilo
         # subtitles filter quema los subtítulos directamente en el video
-        subtitle_filter = f"subtitles={subtitle_path}:force_style='"
+        # Wrapeamos el path con comillas simples para manejar espacios
+        subtitle_filter = f"subtitles='{subtitle_path}':force_style='"
         subtitle_filter += f"FontName={selected_style['FontName']},"
         subtitle_filter += f"FontSize={selected_style['FontSize']},"
         subtitle_filter += f"PrimaryColour={selected_style['PrimaryColour']},"

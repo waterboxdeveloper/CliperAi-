@@ -46,8 +46,21 @@ project_state.json
 .env
 .env.local
 .env.production
+.env.development
+.env.test
 *.key
 *.pem
+credentials.json
+secrets.json
+*.secret
+
+# Docker - archivos con configuración local/sensible
+docker-compose.yml
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.prod.yml
+docker-compose.dev.yml
+.dockerignore.local
 
 # Cache y build
 .pytest_cache/
@@ -99,13 +112,16 @@ sample_data/
 
 # Documentación interna del desarrollo
 pasoxpaso/          # Carpeta de pasos del desarrollo
-pasoxpaso/docker.md # Documentación detallada de Docker (interno)
 docs/idea.md        # Notas de diseño internas
 docs/idea2.md       # Feature spec AI Copy Generation (documentación interna)
+
+# IDE y herramientas de desarrollo - configuraciones personales
 .cursorrules        # Reglas de Cursor
-.cursor/            # Carpeta de configuración de Cursor
+.cursor/            # Carpeta de configuración de Cursor (incluye rules/)
+.claude/            # Carpeta de configuración de Claude Code
 comportamiento.md   # Archivo de comportamiento
-.cursor/rules/      # Reglas específicas de Cursor
+comportamiento.mdc  # Archivo de comportamiento (Cursor)
+*.mdc               # Archivos de Cursor
 
 # Archivos específicos de desarrollo
 *.md.backup
