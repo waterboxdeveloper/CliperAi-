@@ -8,9 +8,29 @@ output/
 downloads/
 temp/
 .env
+.env.*
 .DS_Store
 .pytest_cache
 .mypy_cache
 .ruff_cache
 .uv
-uv.lock
+*.log
+logs/
+
+# Development and internal documentation
+pasoxpaso/
+docs/idea*.md
+tests/
+.cursor/
+.claude/
+.vscode/
+.idea/
+*.md.backup
+*.swp
+*.swo
+
+# IDE config
+.cursorrules
+comportamiento.md
+comportamiento.mdc
+*.mdc

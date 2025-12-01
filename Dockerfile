@@ -4,14 +4,17 @@ FROM python:3.10-slim-bullseye
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies required by FFmpeg and WhisperX
+# Install system dependencies required by FFmpeg, WhisperX, and OpenCV
 # FFmpeg is crucial for video processing
 # libmagic1 is needed by some Python packages (e.g., python-magic)
+# libgl1-mesa-glx and libglib2.0-0 are required by OpenCV for video I/O
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ffmpeg \
     libmagic1 \
-    git && \
+    git \
+    libgl1-mesa-glx \
+    libglib2.0-0 && \
     rm -rf /var/lib/apt/lists/*
 
 # Copy pyproject.toml first

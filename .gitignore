@@ -71,9 +71,13 @@ dist/
 *.egg-info/
 *.egg
 
-# Tests
+# Tests - Internal testing and debugging
 tests/__pycache__/
 tests/*.pyc
+tests/test_*.py          # Internal test files (keep tests/ dir for public integration tests)
+tests/diagnose_*.py      # Diagnostic scripts
+tests/spike_*.py         # Spike test scripts
+tests/*.sh              # Shell scripts for testing
 
 # IDEs
 .vscode/
@@ -110,18 +114,18 @@ Desktop.ini
 test_videos/
 sample_data/
 
-# Documentación interna del desarrollo
-pasoxpaso/          # Carpeta de pasos del desarrollo
-docs/idea.md        # Notas de diseño internas
-docs/idea2.md       # Feature spec AI Copy Generation (documentación interna)
+# Development & Internal Documentation
+pasoxpaso/          # Internal development notes and implementation steps
+docs/idea*.md       # Internal design notes
 
-# IDE y herramientas de desarrollo - configuraciones personales
-.cursorrules        # Reglas de Cursor
-.cursor/            # Carpeta de configuración de Cursor (incluye rules/)
-.claude/            # Carpeta de configuración de Claude Code
-comportamiento.md   # Archivo de comportamiento
-comportamiento.mdc  # Archivo de comportamiento (Cursor)
-*.mdc               # Archivos de Cursor
+# IDE & Development Tools - Personal Configurations
+.cursorrules        # Cursor rules
+.cursor/            # Cursor configuration (includes rules/)
+.claude/            # Claude Code configuration
+claude.md           # Claude Code instructions
+comportamiento.md   # Development behavior notes
+comportamiento.mdc  # Cursor behavior file
+*.mdc               # Cursor files
 
 # Archivos específicos de desarrollo
 *.md.backup

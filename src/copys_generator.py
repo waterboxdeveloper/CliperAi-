@@ -526,64 +526,50 @@ Responde SOLO con JSON válido (sin markdown):"""
 
 Responde SOLO con JSON válido (sin markdown):"""
 
-            # Llamar a Gemini para este batch
             messages = [
                 {"role": "system", "content": full_prompt},
                 {"role": "user", "content": user_message}
             ]
 
-            response = self.llm.invoke(messages)
-            response_text = response.content
+            # --- Micro-retry loop for each batch ---
+            for attempt in range(3):
+                try:
+                    response = self.llm.invoke(messages)
+                    response_text = response.content
 
-            # Limpiar respuesta
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
-            response_text = response_text.strip()
+                    # Limpiar respuesta
+                    if "```json" in response_text:
+                        response_text = response_text.split("```json")[1].split("```")[0]
+                    response_text = response_text.strip()
 
-            # 🔍 DEBUG: Log raw response
-            print(f"\n{'='*60}")
-            print(f"🔍 DEBUG - Gemini Response ({style})")
-            print(f"{'='*60}")
-            print(f"Batch: clips {i+1} to {min(i+BATCH_SIZE, len(clips))}")
-            print(f"Response length: {len(response_text)} chars")
-            print(f"\nFirst 300 chars:")
-            print(response_text[:300])
-            if len(response_text) > 300:
-                print(f"\nLast 100 chars:")
-                print(f"...{response_text[-100:]}")
+                    # Parsear y validar con Pydantic
+                    copies_data = json.loads(response_text)
+                    if 'clips' not in copies_data:
+                        raise ValueError("La respuesta JSON no contiene la clave 'clips'")
+                    
+                    copies_output = CopysOutput(**copies_data)
+                    
+                    # Si todo va bien, añadir y salir del loop de reintentos
+                    all_copies.extend(copies_output.clips)
+                    print(f"   ✓ Batch {i//BATCH_SIZE + 1} successful on attempt {attempt + 1}")
+                    break
 
-            # Parsear y validar con Pydantic para este batch
-            try:
-                copies_data = json.loads(response_text)
-                print(f"\n✓ JSON parsed successfully")
-                print(f"Keys in response: {list(copies_data.keys())}")
+                except (ValidationError, json.JSONDecodeError, ValueError) as e:
+                    print(f"   ❌ Attempt {attempt + 1}/3 FAILED for batch {i//BATCH_SIZE + 1}:")
+                    if isinstance(e, json.JSONDecodeError):
+                        print(f"      Error: Invalid JSON response from LLM - {e}")
+                    else:
+                        print(f"      Error: Validation failed - {e}")
 
-                if 'clips' in copies_data:
-                    print(f"Clips in response: {len(copies_data['clips'])}")
-
-                copies_output = CopysOutput(**copies_data)
-                print(f"✓ Pydantic validation passed!")
-                print(f"Valid clips in batch: {len(copies_output.clips)}")
-                print(f"{'='*60}\n")
-
-            except ValidationError as ve:
-                print(f"\n❌ Pydantic validation FAILED:")
-                for error in ve.errors():
-                    print(f"   - Field: {error['loc']}")
-                    print(f"     Error: {error['msg']}")
-                    if 'input' in error:
-                        print(f"     Value: {str(error['input'])[:100]}")
-                print(f"{'='*60}\n")
-                raise  # Re-raise to trigger exception handler
-            except json.JSONDecodeError as je:
-                print(f"\n❌ JSON parsing FAILED:")
-                print(f"   Error: {je}")
-                print(f"   At position: {je.pos}")
-                print(f"{'='*60}\n")
-                raise
-
-            all_copies.extend(copies_output.clips)
-
+                    if attempt < 2:
+                        print(f"      Retrying in 2 seconds...")
+                        time.sleep(2)
+                    else:
+                        print(f"   ⚠️  Max retries reached. Skipping this batch.")
+            # El `else` en un `for` loop se ejecuta si el loop termina sin `break`
+            else:
+                continue
+        
         return all_copies
 
 

@@ -30,6 +30,7 @@ try:
     from src.clips_generator import ClipsGenerator
     from src.video_exporter import VideoExporter
     from src.copys_generator import generate_copys_for_video
+    from src.cleanup_manager import CleanupManager
     from src.utils import get_state_manager
     from config.content_presets import get_preset, list_presets, get_preset_description
 except ImportError as e:
@@ -186,13 +187,15 @@ def menu_principal(videos: List[Dict], state_manager) -> str:
     if videos:
         menu_table.add_row("1", "Process a video")
         menu_table.add_row("2", "Download new video")
-        menu_table.add_row("3", "Full Pipeline (auto)")
-        menu_table.add_row("4", "Exit")
-        opciones = ["1", "2", "3", "4"]
+        menu_table.add_row("3", "Cleanup project data")
+        menu_table.add_row("4", "Full Pipeline (auto)")
+        menu_table.add_row("5", "Exit")
+        opciones = ["1", "2", "3", "4", "5"]
     else:
         menu_table.add_row("1", "Download new video")
-        menu_table.add_row("2", "Exit")
-        opciones = ["1", "2"]
+        menu_table.add_row("2", "Cleanup project data")
+        menu_table.add_row("3", "Exit")
+        opciones = ["1", "2", "3"]
 
     console.print(Panel(menu_table, title="[bold]Main Menu[/bold]", border_style="cyan"))
     console.print()
@@ -1067,6 +1070,83 @@ def opcion_exportar_clips(video: Dict, state_manager):
 
     aspect_ratio = aspect_map[aspect_choice]
 
+    # PASO 3: Face tracking configuration
+    enable_face_tracking = False
+    face_tracking_strategy = "keep_in_frame"
+    face_tracking_sample_rate = 3
+
+    if aspect_ratio == "9:16":  # Solo relevante para videos verticales
+        console.print()
+        enable_face_tracking = Confirm.ask(
+            "[cyan]Enable intelligent face tracking for dynamic reframing?[/cyan]",
+            default=False
+        )
+
+        if enable_face_tracking:
+            console.print("\n[bold]Face Tracking Strategy:[/bold]")
+            console.print("  [cyan]1.[/cyan] keep_in_frame (recommended) - Minimal movement, professional look")
+            console.print("  [cyan]2.[/cyan] centered - Always center on face (can be jittery)")
+
+            style_choice = Prompt.ask(
+                "\n[cyan]Choice[/cyan]",
+                choices=["1", "2"],
+                default="1"
+            )
+
+            face_tracking_strategy = "keep_in_frame" if style_choice == "1" else "centered"
+
+            # Advanced settings (opcional)
+            console.print()
+            advanced = Confirm.ask(
+                "[dim]Configure advanced settings (frame sampling)?[/dim]",
+                default=False
+            )
+
+            if advanced:
+                sample_rate_input = Prompt.ask(
+                    "Frame sample rate (process every N frames)",
+                    default="3"
+                )
+                try:
+                    face_tracking_sample_rate = int(sample_rate_input)
+                except ValueError:
+                    console.print("[yellow]Invalid input, using default: 3[/yellow]")
+                    face_tracking_sample_rate = 3
+
+            # Visual confirmation
+            console.print()
+            console.print("[green]✓[/green] Face tracking enabled:")
+            console.print(f"  Strategy: [cyan]{face_tracking_strategy}[/cyan]")
+            console.print(f"  Sample rate: every [cyan]{face_tracking_sample_rate}[/cyan] frame(s)")
+
+    # --- Branding (Logo Only) ---
+    console.print()
+    add_logo = Confirm.ask("[cyan]Add logo overlay to clips?[/cyan]", default=False)
+    
+    logo_path = "assets/logo.png"
+    logo_position = "top-right"
+    logo_scale = 0.1
+
+    if add_logo:
+        console.print(f"[green]✓[/green] Logo overlay enabled.")
+        
+        advanced_branding = Confirm.ask(
+            "\n[dim]Configure advanced logo settings (path, position, scale)?[/dim]",
+            default=False
+        )
+        if advanced_branding:
+            logo_path = Prompt.ask("Path to logo file", default=logo_path)
+            logo_position = Prompt.ask(
+                "Logo position",
+                choices=["top-right", "top-left", "bottom-right", "bottom-left"],
+                default=logo_position
+            )
+            logo_scale_str = Prompt.ask("Logo scale (e.g., 0.1 for 10% of height)", default=str(logo_scale))
+            try:
+                logo_scale = float(logo_scale_str)
+            except ValueError:
+                console.print(f"[yellow]Invalid scale, using default: {logo_scale}[/yellow]")
+
     # Pregunto si quiere subtítulos
     console.print()
     add_subtitles = Confirm.ask(
@@ -1164,6 +1244,13 @@ def opcion_exportar_clips(video: Dict, state_manager):
         # Obtengo el path de la transcripción para los subtítulos
         transcript_path = state.get('transcript_path') or state.get('transcription_path')
 
+        # Mensaje informativo sobre el proceso de export
+        if enable_face_tracking:
+            console.print("[cyan]Starting export with AI-powered face tracking...[/cyan]")
+            console.print("[dim]Note: Face detection may take longer than static crop[/dim]\n")
+        else:
+            console.print("[cyan]Starting export...[/cyan]\n")
+
         # Exporto los clips
         exported_paths = exporter.export_clips(
             video_path=video_path,
@@ -1174,7 +1261,16 @@ def opcion_exportar_clips(video: Dict, state_manager):
             transcript_path=transcript_path,
             subtitle_style=subtitle_style,
             organize_by_style=organize_by_style,
-            clip_styles=clip_styles
+            clip_styles=clip_styles,
+            # PASO 3: Face tracking parameters
+            enable_face_tracking=enable_face_tracking,
+            face_tracking_strategy=face_tracking_strategy,
+            face_tracking_sample_rate=face_tracking_sample_rate,
+            # PASO 4: Branding parameters
+            add_logo=add_logo,
+            logo_path=logo_path,
+            logo_position=logo_position,
+            logo_scale=logo_scale
         )
 
         if exported_paths:
@@ -1225,6 +1321,263 @@ def opcion_exportar_clips(video: Dict, state_manager):
     Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
 
 
+def opcion_cleanup_project():
+    """
+    Flujo interactivo para limpiar artifacts del proyecto
+
+    DECISIÓN: Interactivo con confirmación obligatoria
+    RAZÓN: Operación destructiva - prevenir eliminaciones accidentales
+    """
+    console.clear()
+    mostrar_banner()
+
+    console.print(Panel(
+        "[bold]Cleanup Project Data[/bold]\nManage and delete project artifacts",
+        border_style="cyan"
+    ))
+    console.print()
+
+    cleanup_manager = CleanupManager()
+    state_manager = get_state_manager()
+    state = state_manager.get_all_videos()
+
+    if not state:
+        console.print("[yellow]No project data to clean (state is empty)[/yellow]")
+        console.print()
+        Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
+        return
+
+    # Mostrar artifacts disponibles
+    console.print("[bold]Cleanable Project Data:[/bold]\n")
+    cleanup_manager.display_cleanable_artifacts()
+    console.print()
+
+    # Opciones de cleanup
+    menu_table = Table(show_header=False, box=box.ROUNDED, border_style="cyan", padding=(0, 2))
+    menu_table.add_column("Option", style="bold cyan", width=8)
+    menu_table.add_column("Description", style="white")
+
+    menu_table.add_row("1", "Clean specific video")
+    menu_table.add_row("2", "Clean all outputs only (keep transcripts)")
+    menu_table.add_row("3", "Clean entire project (fresh start)")
+    menu_table.add_row("4", "Back to main menu")
+
+    console.print(Panel(menu_table, title="[bold]Cleanup Options[/bold]", border_style="cyan"))
+    console.print()
+
+    choice = Prompt.ask(
+        "[bold cyan]Choose cleanup option[/bold cyan]",
+        choices=["1", "2", "3", "4"],
+        default="4"
+    )
+
+    if choice == "1":
+        cleanup_specific_video(cleanup_manager, state)
+    elif choice == "2":
+        cleanup_outputs_only(cleanup_manager, state)
+    elif choice == "3":
+        cleanup_entire_project(cleanup_manager)
+    elif choice == "4":
+        return
+
+    console.print()
+    Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
+
+
+def cleanup_specific_video(cleanup_manager: CleanupManager, state: dict):
+    """Cleanup de un video específico con selección granular"""
+    console.print()
+
+    # Listar videos disponibles
+    video_keys = list(state.keys())
+
+    console.print("[bold]Available videos:[/bold]\n")
+
+    videos_table = Table(show_header=False, box=None, padding=(0, 2))
+    videos_table.add_column(style="cyan", width=6)
+    videos_table.add_column(style="white")
+
+    for idx, video_key in enumerate(video_keys, 1):
+        # Nombre corto del video
+        video_name = video_key[:50] + "..." if len(video_key) > 50 else video_key
+        videos_table.add_row(str(idx), video_name)
+
+    videos_table.add_row(str(len(video_keys) + 1), "[dim]Cancel[/dim]")
+
+    console.print(videos_table)
+    console.print()
+
+    video_idx = Prompt.ask(
+        "[cyan]Select video to clean[/cyan]",
+        choices=[str(i) for i in range(1, len(video_keys) + 2)],
+        default=str(len(video_keys) + 1)
+    )
+
+    if int(video_idx) == len(video_keys) + 1:
+        console.print("[yellow]Cleanup cancelled[/yellow]")
+        return
+
+    selected_video_key = video_keys[int(video_idx) - 1]
+
+    # Mostrar artifacts de ese video
+    artifacts = cleanup_manager.get_video_artifacts(selected_video_key)
+
+    console.print(f"\n[bold]Artifacts for '{selected_video_key[:50]}':[/bold]\n")
+
+    artifact_options = []
+    for artifact_type, info in artifacts.items():
+        if info['exists']:
+            size_mb = info['size'] / 1024 / 1024
+            console.print(f"  - {artifact_type}: {size_mb:.2f} MB")
+            artifact_options.append(artifact_type)
+
+    if not artifact_options:
+        console.print("[yellow]No artifacts to clean for this video[/yellow]")
+        return
+
+    # Selección granular
+    console.print()
+    menu_table = Table(show_header=False, box=None, padding=(0, 2))
+    menu_table.add_column(style="cyan", width=6)
+    menu_table.add_column(style="white")
+
+    menu_table.add_row("1", "All artifacts")
+    menu_table.add_row("2", "Select specific artifacts")
+    menu_table.add_row("3", "Cancel")
+
+    console.print(menu_table)
+    console.print()
+
+    granular_choice = Prompt.ask(
+        "[cyan]What to clean?[/cyan]",
+        choices=["1", "2", "3"],
+        default="3"
+    )
+
+    if granular_choice == "3":
+        console.print("[yellow]Cleanup cancelled[/yellow]")
+        return
+
+    if granular_choice == "1":
+        to_delete = artifact_options
+    else:
+        # Selección manual
+        console.print()
+        to_delete = []
+        for artifact_type in artifact_options:
+            delete_it = Confirm.ask(f"Delete {artifact_type}?", default=False)
+            if delete_it:
+                to_delete.append(artifact_type)
+
+    if not to_delete:
+        console.print("[yellow]Nothing selected to delete[/yellow]")
+        return
+
+    # Calcular total a eliminar
+    total_size = sum(
+        artifacts[t]['size']
+        for t in to_delete
+        if t in artifacts
+    )
+    total_mb = total_size / 1024 / 1024
+
+    # CONFIRMACIÓN FINAL
+    console.print(f"\n[bold red]This will DELETE {len(to_delete)} items ({total_mb:.2f} MB)[/bold red]")
+    for t in to_delete:
+        console.print(f"  - {t}")
+    console.print()
+
+    if not Confirm.ask("Continue?", default=False):
+        console.print("[yellow]Cleanup cancelled[/yellow]")
+        return
+
+    # Ejecutar cleanup
+    console.print("\n[bold]Cleaning...[/bold]")
+    results = cleanup_manager.delete_video_artifacts(selected_video_key, to_delete)
+
+    # Mostrar resultados
+    success_count = sum(1 for r in results.values() if r)
+    console.print(f"\n[green]Deleted {success_count}/{len(to_delete)} items ({total_mb:.2f} MB freed)[/green]")
+
+
+def cleanup_outputs_only(cleanup_manager: CleanupManager, state: dict):
+    """Elimina SOLO los outputs exportados (conserva transcripts)"""
+    console.print()
+
+    # Calcular total de outputs
+    total_output_size = 0
+    total_clips = 0
+
+    for video_key in state.keys():
+        artifacts = cleanup_manager.get_video_artifacts(video_key)
+        output_info = artifacts.get('output', {})
+
+        if output_info.get('exists'):
+            total_output_size += output_info.get('size', 0)
+            total_clips += output_info.get('clip_count', 0)
+
+    if total_output_size == 0:
+        console.print("[yellow]No exported clips to clean[/yellow]")
+        return
+
+    size_mb = total_output_size / 1024 / 1024
+
+    console.print("[bold]This will delete ALL exported clips:[/bold]")
+    console.print(f"  - Videos: {len(state)} videos")
+    console.print(f"  - Clips: {total_clips} clips")
+    console.print(f"  - Size: {size_mb:.2f} MB")
+    console.print("\n[dim]Transcripts and source videos will be preserved[/dim]\n")
+
+    if not Confirm.ask("Continue?", default=False):
+        console.print("[yellow]Cleanup cancelled[/yellow]")
+        return
+
+    # Eliminar outputs de cada video
+    console.print("\n[bold]Cleaning outputs...[/bold]")
+    deleted_count = 0
+    for video_key in state.keys():
+        results = cleanup_manager.delete_video_artifacts(video_key, ['output'])
+        if results.get('output'):
+            deleted_count += 1
+
+    console.print(f"\n[green]Deleted outputs from {deleted_count} videos ({size_mb:.2f} MB freed)[/green]")
+
+
+def cleanup_entire_project(cleanup_manager: CleanupManager):
+    """Fresh start - elimina TODO el proyecto"""
+    console.print()
+
+    console.print("[bold red]WARNING: This will DELETE ALL project data:[/bold red]")
+    console.print("  - All downloaded videos")
+    console.print("  - All transcripts")
+    console.print("  - All detected clips")
+    console.print("  - All exported clips")
+    console.print("  - Project state\n")
+
+    # Confirmación EXTREMA - requiere escribir "DELETE ALL"
+    confirmation = Prompt.ask(
+        "[bold]Type 'DELETE ALL' to confirm[/bold]",
+        default="cancel"
+    )
+
+    if confirmation != "DELETE ALL":
+        console.print("[yellow]Cleanup cancelled[/yellow]")
+        return
+
+    console.print("\n[bold]Cleaning entire project...[/bold]")
+
+    results = cleanup_manager.delete_all_project_data()
+
+    if all(results.values()):
+        console.print("\n[green]Project cleaned successfully[/green]")
+        console.print("[dim]Fresh start ready. Run CLIPER to begin.[/dim]")
+    else:
+        console.print("\n[yellow]Some items could not be deleted[/yellow]")
+        for item, success in results.items():
+            status = "✓" if success else "✗"
+            console.print(f"  {status} {item}")
+
+
 def main():
     """
     Función principal - loop del programa
@@ -1271,15 +1624,21 @@ def main():
                 opcion_descargar_video(downloader, state_manager)
                 videos = escanear_videos()  # Reescaneo
             elif opcion == "3":
+                opcion_cleanup_project()
+                videos = escanear_videos()  # Reescaneo (pueden haberse eliminado)
+            elif opcion == "4":
                 console.print("\n[yellow]Full Pipeline coming soon![/yellow]")
                 Prompt.ask("\n[dim]Press ENTER to continue[/dim]", default="")
-            elif opcion == "4":
+            elif opcion == "5":
                 break
         else:
             if opcion == "1":
                 opcion_descargar_video(downloader, state_manager)
                 videos = escanear_videos()  # Reescaneo
             elif opcion == "2":
+                opcion_cleanup_project()
+                videos = escanear_videos()  # Reescaneo
+            elif opcion == "3":
                 break
 
         console.clear()
