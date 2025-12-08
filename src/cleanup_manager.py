@@ -321,12 +321,13 @@ class CleanupManager:
         - Esta función NO pide confirmación (responsabilidad del caller)
         - Elimina directorios completos y los recrea vacíos
         - Reset total de state
+        - ESPECÍFICO: Limpia archivos temporales de caché, FFmpeg, etc.
 
         Args:
             dry_run: Si True, solo simula
 
         Returns:
-            Dict con resultados: {'downloads': True, 'temp': True, 'output': True, 'state': True}
+            Dict con resultados: {'downloads': True, 'temp': True, 'output': True, 'cache': True, 'state': True}
         """
         results = {}
 
@@ -372,6 +373,13 @@ class CleanupManager:
                 logger.error(f"Failed to clean {dir_name}/: {e}")
                 results[dir_name] = False
 
+        # Limpiar caché y archivos temporales residuales
+        if not dry_run:
+            results['cache'] = self._clean_cache_and_residuals()
+        else:
+            logger.info("[DRY RUN] Would clean cache and residual temporary files")
+            results['cache'] = True
+
         # Reset state
         if not dry_run:
             try:
@@ -387,6 +395,106 @@ class CleanupManager:
             results['state'] = True
 
         return results
+
+    def _clean_cache_and_residuals(self) -> bool:
+        """
+        Limpia caché y archivos temporales residuales que pueden interferir
+
+        ESPECÍFICO:
+        - Archivos de caché de FFmpeg
+        - Archivos lock (.lock)
+        - Archivos temporales en /tmp
+        - Copys sin SRT (huérfanos)
+        - Logs antiguos
+        - Temporales de video_exporter (temp_*.mp4, temp_reframed_*.mp4)
+
+        Returns:
+            bool: True si limpió exitosamente
+        """
+        try:
+            cleaned_count = 0
+            cleaned_size = 0
+
+            # 1. Limpiar archivos lock en temp/
+            lock_patterns = ['*.lock', '.lock']
+            for pattern in lock_patterns:
+                for lock_file in self.temp_dir.glob(pattern):
+                    try:
+                        size = lock_file.stat().st_size
+                        lock_file.unlink()
+                        cleaned_count += 1
+                        cleaned_size += size
+                        logger.debug(f"Removed lock file: {lock_file.name}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove lock file {lock_file}: {e}")
+
+            # 2. Limpiar archivos temporales de FFmpeg/video_exporter
+            # (Estos NO deberían estar acá si todo limpió bien, pero por si acaso)
+            temp_patterns = ['temp_*.mp4', 'temp_reframed_*.mp4', '*_temp.mp4']
+            for pattern in temp_patterns:
+                for temp_file in self.output_dir.rglob(pattern):
+                    try:
+                        size = temp_file.stat().st_size
+                        temp_file.unlink()
+                        cleaned_count += 1
+                        cleaned_size += size
+                        logger.debug(f"Removed residual temp file: {temp_file.name}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove temp file {temp_file}: {e}")
+
+            # 3. Limpiar SRTs huérfanos (clips sin .mp4 correspondiente)
+            for srt_file in self.output_dir.rglob('*.srt'):
+                try:
+                    mp4_file = srt_file.with_suffix('.mp4')
+                    if not mp4_file.exists():
+                        size = srt_file.stat().st_size
+                        srt_file.unlink()
+                        cleaned_count += 1
+                        cleaned_size += size
+                        logger.debug(f"Removed orphaned SRT: {srt_file.name}")
+                except Exception as e:
+                    logger.warning(f"Could not process SRT file {srt_file}: {e}")
+
+            # 4. Limpiar __pycache__ solo en src/ y tests/ (caché Python compilado)
+            # ESPECÍFICO: Solo en directorios conocidos donde realmente se genera
+            source_dirs = [
+                self.downloads_dir.parent / 'src',
+                self.downloads_dir.parent / 'tests'
+            ]
+
+            for source_dir in source_dirs:
+                if source_dir.exists():
+                    for pycache_dir in source_dir.rglob('__pycache__'):
+                        try:
+                            shutil.rmtree(pycache_dir)
+                            cleaned_count += 1
+                            logger.debug(f"Removed Python cache: {pycache_dir}")
+                        except Exception as e:
+                            logger.warning(f"Could not remove __pycache__: {e}")
+
+            # 5. Limpiar .DS_Store solo en output/ (residuales de macOS)
+            # ESPECÍFICO: Solo donde puede quedar basura de Finder
+            for ds_store in self.output_dir.rglob('.DS_Store'):
+                try:
+                    size = ds_store.stat().st_size
+                    ds_store.unlink()
+                    cleaned_count += 1
+                    cleaned_size += size
+                    logger.debug(f"Removed macOS cache: {ds_store.name}")
+                except Exception as e:
+                    logger.warning(f"Could not remove .DS_Store: {e}")
+
+            cleaned_size_mb = cleaned_size / 1024 / 1024
+            if cleaned_count > 0:
+                logger.info(f"Cleaned {cleaned_count} cache/residual files ({cleaned_size_mb:.2f} MB)")
+            else:
+                logger.info("No cache or residual files found")
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error cleaning cache and residuals: {e}")
+            return False
 
     def display_cleanable_artifacts(self, video_key: Optional[str] = None):
         """

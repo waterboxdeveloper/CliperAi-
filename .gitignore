@@ -15,6 +15,7 @@ venv.bak/
 downloads/           # Videos descargados de YouTube
 output/             # Clips finales procesados
 temp/               # Archivos temporales (transcripciones, audio, etc.)
+pasoxpaso/          # Notas de desarrollo paso a paso (local only)
 *.log
 logs/
 
