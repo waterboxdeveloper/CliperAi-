@@ -120,10 +120,10 @@ pasoxpaso/          # Internal development notes and implementation steps
 docs/idea*.md       # Internal design notes
 
 # IDE & Development Tools - Personal Configurations
-.cursorrules        # Cursor rules
+.cursorrules        # Cursor rules (local only)
 .cursor/            # Cursor configuration (includes rules/)
-.claude/            # Claude Code configuration
-claude.md           # Claude Code instructions
+.claude/            # Claude Code configuration (local only)
+claude.md           # Claude Code instructions (local only)
 comportamiento.md   # Development behavior notes
 comportamiento.mdc  # Cursor behavior file
 *.mdc               # Cursor files
