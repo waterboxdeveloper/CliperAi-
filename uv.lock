@@ -654,7 +654,7 @@ requires-dist = [
     { name = "tqdm" },
     { name = "typer" },
     { name = "whisperx", git = "https://github.com/m-bain/whisperx.git" },
-    { name = "yt-dlp" },
+    { name = "yt-dlp", specifier = ">=2024.12.10" },
 ]
 provides-extras = ["dev"]
 

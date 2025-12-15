@@ -197,6 +197,9 @@ class YoutubeDownloader:
                 }],
                 'quiet': False,
                 'no_warnings': False,
+                # Manejo robusto de conexión (SSL + reintentos)
+                'socket_timeout': 30,  # Timeout explícito para evitar cuelgues
+                'retries': 3,  # Reintentos automáticos simples
             }
 
             # ¡A descargar!
@@ -255,6 +258,9 @@ class YoutubeDownloader:
                     'preferredcodec': 'mp3',
                     'preferredquality': '192',
                 }],
+                # Manejo robusto de conexión (SSL + reintentos)
+                'socket_timeout': 30,
+                'retries': 3,
             }
 
             self.logger.info(f"🎵 Descargando audio: {url}")

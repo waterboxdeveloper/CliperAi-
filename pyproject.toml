@@ -9,7 +9,7 @@ requires-python = ">=3.9,<3.14"
 dependencies = [
     "clipsai",
     "whisperx @ git+https://github.com/m-bain/whisperx.git",
-    "yt-dlp",
+    "yt-dlp>=2024.12.10",  # Versión reciente para soporte SABR streaming de YouTube
     "python-dotenv",
     "loguru",
     "typer",
