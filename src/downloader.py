@@ -210,22 +210,44 @@ class YoutubeDownloader:
                 # Esto descarga el video
                 info = ydl.extract_info(url, download=True)
 
-                # Obtengo la ruta final del archivo
-                final_filename = ydl.prepare_filename(info)
+                # DECISIÓN ARQUITECTÓNICA (yt-dlp 2026+ compatibility):
+                # En lugar de confiar en prepare_filename() (que falla con caracteres especiales),
+                # buscamos por video_id. Esto evita problemas de encoding (ej: caracteres chinos).
+                # yt-dlp 2026+ cambió cómo maneja filenames después de merge, causando:
+                # - Caracteres especiales (： chino) → encoding corruption
+                # - prepare_filename() → retorna paths inválidos
+                # Solución: Buscar archivo por video_id en downloads/ (garantiza correctitud)
 
-                # Me aseguro de que termine en .mp4
-                if not final_filename.endswith('.mp4'):
-                    final_filename = final_filename.rsplit('.', 1)[0] + '.mp4'
+                video_id = info.get('id')
 
-                final_path = Path(final_filename)
+                # Buscar archivo MP4 por video_id (evita encoding issues)
+                # sorted() por mtime garantiza el más reciente si hay múltiples
+                mp4_files = sorted(
+                    self.download_dir.glob(f'*{video_id}.mp4'),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
 
-                # Verifico que el archivo exista
-                if final_path.exists():
+                if mp4_files:
+                    final_path = mp4_files[0]  # El más reciente
                     self.logger.info(f"✅ Descargado: {final_path}")
                     return str(final_path)
                 else:
-                    self.logger.error("No encuentro el archivo")
-                    return None
+                    # Fallback: buscar cualquier MP4 descargado recientemente
+                    # (por si el video_id cambió o algún otro edge case)
+                    all_mp4s = sorted(
+                        self.download_dir.glob('*.mp4'),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True
+                    )
+
+                    if all_mp4s:
+                        final_path = all_mp4s[0]
+                        self.logger.info(f"✅ Descargado (fallback): {final_path}")
+                        return str(final_path)
+                    else:
+                        self.logger.error(f"No encuentro archivo MP4 para video_id: {video_id}")
+                        return None
 
         except yt_dlp.utils.DownloadError as e:
             self.logger.error(f"❌ Error de descarga: {e}")
@@ -267,14 +289,34 @@ class YoutubeDownloader:
 
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
-                final_filename = ydl.prepare_filename(info).rsplit('.', 1)[0] + '.mp3'
-                final_path = Path(final_filename)
+                video_id = info.get('id')
 
-                if final_path.exists():
+                # Mismo fix que download(): buscar por video_id para evitar encoding issues
+                mp3_files = sorted(
+                    self.download_dir.glob(f'*{video_id}.mp3'),
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
+
+                if mp3_files:
+                    final_path = mp3_files[0]
                     self.logger.info(f"✅ Audio: {final_path}")
                     return str(final_path)
                 else:
-                    return None
+                    # Fallback: buscar cualquier MP3 reciente
+                    all_mp3s = sorted(
+                        self.download_dir.glob('*.mp3'),
+                        key=lambda p: p.stat().st_mtime,
+                        reverse=True
+                    )
+
+                    if all_mp3s:
+                        final_path = all_mp3s[0]
+                        self.logger.info(f"✅ Audio (fallback): {final_path}")
+                        return str(final_path)
+                    else:
+                        self.logger.error(f"No encuentro archivo MP3 para video_id: {video_id}")
+                        return None
 
         except Exception as e:
             self.logger.error(f"Error: {e}")

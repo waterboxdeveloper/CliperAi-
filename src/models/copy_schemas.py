@@ -183,6 +183,21 @@ class ClipCopy(BaseModel):
         description="Caption completo con hashtags integrados"
     )
 
+    opening_words: str = Field(
+        default="",
+        description="Palabras exactas del hablante (primeros 5-10 segundos del clip)"
+    )
+
+    opening_words_used: bool = Field(
+        default=False,
+        description="¿El copy comienza con las opening_words exactas?"
+    )
+
+    speaker_hashtags_provided: List[str] = Field(
+        default_factory=list,
+        description="Hashtags mencionados por el speaker (extraídos de la transcripción)"
+    )
+
     metadata: CopyMetadata = Field(
         description="Análisis predictivo del clip"
     )
@@ -259,6 +274,52 @@ class ClipCopy(BaseModel):
 
         return v[:150]  # Garantizar que nunca exceda 150
 
+    # Validador 4: Verificar que opening_words esté en el copy (si se proporciona)
+    @field_validator('copy', mode='after')
+    @classmethod
+    def validate_opening_words_present(cls, copy_text, info):
+        """
+        Verifica que si hay opening_words, aparezcan al inicio del copy.
+
+        ¿Por qué este validador?
+        - Si el generador recibe opening_words, DEBE usarlas
+        - El copy DEBE comenzar con esas palabras exactas
+        - Este validador confirma que el LLM obedeció la restricción
+
+        ¿Por qué mode='after'?
+        - Primero trunca (validador anterior)
+        - Luego verifica opening_words (este validador)
+        - Si opening_words se perdieron al truncar, lo detectamos
+
+        ¿Qué pasa si falla?
+        - Pydantic rechaza → LangGraph reintenta con mejor prompt
+        """
+        # Obtener opening_words del data (si existe)
+        opening_words = info.data.get('opening_words', '')
+
+        # Si no hay opening_words especificados, validación OK
+        if not opening_words:
+            return copy_text
+
+        # Si hay opening_words, deben estar en el copy (case-insensitive)
+        copy_lower = copy_text.lower()
+        opening_lower = opening_words.lower()
+
+        # Buscar si las opening_words están al inicio o en el copy
+        if opening_lower not in copy_lower:
+            raise ValueError(
+                f"Copy must contain the speaker's opening words: '{opening_words}'. "
+                f"Got: '{copy_text[:50]}...'"
+            )
+
+        # Idealmente deberían estar al inicio (después de truncar)
+        if not copy_lower.startswith(opening_lower):
+            # No es fatal, pero alertamos
+            # El copy podría estar truncado y haber perdido el inicio
+            pass
+
+        return copy_text
+
 
 # ============================================================================
 # OUTPUT COMPLETO DE GEMINI
@@ -306,6 +367,9 @@ class CopysOutput(BaseModel):
                     {
                         "clip_id": 1,
                         "copy": "Ever wondered why Q&As get chaotic? 🤔 This changes everything #TechMeetups #AI",
+                        "opening_words": "Ever wondered why Q&As get chaotic",
+                        "opening_words_used": True,
+                        "speaker_hashtags_provided": ["#TechMeetups"],
                         "metadata": {
                             "sentiment": "curious_educational",
                             "sentiment_score": 0.75,

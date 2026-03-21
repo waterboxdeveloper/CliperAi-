@@ -10,10 +10,39 @@ Orquesta todo el pipeline: download → transcribe → generate clips → resize
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Cargar variables de entorno desde .env
 load_dotenv()
+
+# ============================================================================
+# SUPPRESS VERBOSE LOGS FROM HEAVY LIBRARIES (BEFORE imports)
+# ============================================================================
+import logging
+import warnings
+import os
+
+# Suprimir warnings globalmente
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# Suprimir stdout/stderr de librerías durante startup
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # TensorFlow
+logging.getLogger("torch").setLevel(logging.ERROR)
+logging.getLogger("torchvision").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("nltk").setLevel(logging.ERROR)
+logging.getLogger("pyannote").setLevel(logging.ERROR)
+logging.getLogger("whisperx").setLevel(logging.ERROR)
+logging.getLogger("urllib3").setLevel(logging.ERROR)
+logging.getLogger("numba").setLevel(logging.ERROR)
+
+# Redirigir stderr a /dev/null temporalmente
+import io
+sys.stderr = io.StringIO()
+# ============================================================================
 
 # Rich para interfaz profesional
 from rich.console import Console
@@ -22,6 +51,9 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.text import Text
 from rich import box
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TaskProgressColumn
+from rich.layout import Layout
+import time
 
 # Mis módulos
 try:
@@ -31,47 +63,197 @@ try:
     from src.video_exporter import VideoExporter
     from src.copys_generator import generate_copys_for_video
     from src.cleanup_manager import CleanupManager
+    from src.local_importer import LocalVideoImporter
     from src.utils import get_state_manager
+    from src.utils.logger import setup_logger
     from config.content_presets import get_preset, list_presets, get_preset_description
 except ImportError as e:
     print(f"Error importando módulos: {e}")
     print("Ejecuta desde la raíz del proyecto: uv run cliper.py")
     sys.exit(1)
 
+# ============================================================================
+# RESTORE stderr after imports (warnings already suppressed)
+# ============================================================================
+sys.stderr = sys.__stderr__
+# ============================================================================
+
 # Console de Rich
 console = Console()
+
+# Logger global (será inicializado en main())
+logger = None
 
 
 def mostrar_banner():
     """
-    Banner principal de CLIPER
+    Banner principal profesional de CLIPER
     """
     console.clear()
 
-    logo = Text()
-    logo.append("CLIPER", style="bold cyan")
-    logo.append(" | Video Clipper\n", style="white")
-    logo.append("Transform long videos into viral clips", style="dim")
-    logo.justify = "center"
-
-    footer = Text()
-    footer.append("Developed by ", style="dim")
-    footer.append("opino.tech", style="bold magenta")
-    footer.append(" | Powered by ", style="dim")
-    footer.append("AI", style="bold green")
-    footer.append(" | ", style="dim")
-    footer.append("CDMX", style="bold yellow")
-
-    panel = Panel(
-        logo,
-        title="[bold white]Welcome[/bold white]",
-        subtitle=footer,
-        border_style="cyan",
-        box=box.DOUBLE
-    )
-
-    console.print(panel)
+    # Banner superior con gradiente visual
     console.print()
+
+    # Título principal con estilo
+    title = Text()
+    title.append("╔", style="bold cyan")
+    title.append("════════════════════════════════════════════════════════════", style="cyan")
+    title.append("╗", style="bold cyan")
+    title.justify = "center"
+    console.print(title)
+
+    logo = Text()
+    logo.append("║  ", style="cyan")
+    logo.append("🎬 CLIPER", style="bold cyan")
+    logo.append(" | Video Clipper  ", style="bold white")
+    logo.append("║", style="cyan")
+    logo.justify = "center"
+    console.print(logo)
+
+    subtitle = Text()
+    subtitle.append("║  ", style="cyan")
+    subtitle.append("Transform long videos into viral clips", style="bold yellow")
+    subtitle.append("  ║", style="cyan")
+    subtitle.justify = "center"
+    console.print(subtitle)
+
+    # Línea de separación
+    separator = Text()
+    separator.append("╠", style="bold cyan")
+    separator.append("════════════════════════════════════════════════════════════", style="cyan")
+    separator.append("╣", style="bold cyan")
+    separator.justify = "center"
+    console.print(separator)
+
+    # Información
+    info = Text()
+    info.append("║  ", style="cyan")
+    info.append("Developed by ", style="dim")
+    info.append("opino.tech", style="bold magenta")
+    info.append("  |  ", style="dim")
+    info.append("Powered by ", style="dim")
+    info.append("AI", style="bold green")
+    info.append("  |  ", style="dim")
+    info.append("CDMX", style="bold yellow")
+    info.append("  ║", style="cyan")
+    info.justify = "center"
+    console.print(info)
+
+    footer_line = Text()
+    footer_line.append("╚", style="bold cyan")
+    footer_line.append("════════════════════════════════════════════════════════════", style="cyan")
+    footer_line.append("╝", style="bold cyan")
+    footer_line.justify = "center"
+    console.print(footer_line)
+    console.print()
+
+
+class OperationProgress:
+    """
+    Sistema profesional de Progress + Logs para operaciones largas
+
+    Layout:
+    ┌─ PROGRESS (izquierda 60%) ─┬─ LOGS (derecha 40%) ─┐
+    │ Bar + info                  │ Panel scrollable     │
+    └─────────────────────────────┴──────────────────────┘
+    """
+
+    def __init__(self, operation_name: str, total_steps: int = 100):
+        self.operation_name = operation_name
+        self.total_steps = total_steps
+        self.logs = []
+        self.max_logs = 12
+        self.current_step = 0
+        self.start_time = time.time()
+
+    def add_log(self, message: str, level: str = "INFO"):
+        """Agregar log con timestamp"""
+        timestamp = time.strftime("%H:%M:%S")
+
+        # Mapeo de levels a emojis
+        level_emoji = {
+            "INFO": "ℹ️",
+            "SUCCESS": "✓",
+            "WARNING": "⚠️",
+            "ERROR": "✗",
+            "PROGRESS": "⏳"
+        }
+
+        emoji = level_emoji.get(level, "•")
+        log_text = f"[dim][{timestamp}][/dim] {emoji} {message}"
+
+        self.logs.append(log_text)
+        if len(self.logs) > self.max_logs:
+            self.logs.pop(0)
+
+    def render_progress_panel(self, current_detail: str = "", time_remaining: str = ""):
+        """Renderiza el panel de progress (lado izquierdo)"""
+        percentage = (self.current_step / self.total_steps * 100) if self.total_steps > 0 else 0
+
+        # Barra de progreso manual (más control)
+        bar_length = 30
+        filled = int(bar_length * self.current_step / self.total_steps) if self.total_steps > 0 else 0
+        bar = "█" * filled + "░" * (bar_length - filled)
+
+        # Elapsed time
+        elapsed = time.time() - self.start_time
+        elapsed_str = f"{int(elapsed)}s"
+
+        progress_text = f"""
+[bold cyan]⏳ {self.operation_name}[/bold cyan]
+
+[bold white][{bar}][/bold white]
+[cyan]{percentage:>6.1f}%[/cyan]
+
+[dim]Current:[/dim] {current_detail}
+[dim]Elapsed:[/dim] {elapsed_str}
+[dim]ETA:[/dim] {time_remaining or '—'}
+"""
+
+        return Panel(
+            progress_text.strip(),
+            title="[bold white]Progress[/bold white]",
+            border_style="cyan",
+            box=box.ROUNDED,
+            padding=(1, 2)
+        )
+
+    def render_logs_panel(self):
+        """Renderiza el panel de logs (lado derecho)"""
+        logs_text = "\n".join(self.logs) if self.logs else "[dim]Waiting for activity...[/dim]"
+
+        return Panel(
+            logs_text,
+            title="[bold white]Logs[/bold white]",
+            border_style="blue",
+            box=box.ROUNDED,
+            padding=(1, 1)
+        )
+
+    def show(self, current_detail: str = "", time_remaining: str = ""):
+        """Mostrar layout actual (progress + logs lado a lado)"""
+        console.clear()
+        mostrar_banner()
+
+        # Crear layout de dos columnas
+        layout = Layout()
+        layout.split_row(
+            Layout(name="left", ratio=60),
+            Layout(name="right", ratio=40)
+        )
+
+        # Left: Progress
+        layout["left"].update(self.render_progress_panel(current_detail, time_remaining))
+
+        # Right: Logs
+        layout["right"].update(self.render_logs_panel())
+
+        console.print(layout)
+
+    def update(self, step: int, detail: str = "", time_remaining: str = ""):
+        """Actualizar progreso y mostrar"""
+        self.current_step = min(step, self.total_steps)
+        self.show(detail, time_remaining)
 
 
 def escanear_videos() -> List[Dict[str, str]]:
@@ -173,35 +355,44 @@ def menu_principal(videos: List[Dict], state_manager) -> str:
             console.print(table)
             console.print()
 
-    # Creo el menú
+    # Creo el menú mejorado
     menu_table = Table(
         show_header=False,
         box=box.ROUNDED,
         border_style="cyan",
-        padding=(0, 2)
+        padding=(0, 3)
     )
 
-    menu_table.add_column("Option", style="bold cyan", width=8)
-    menu_table.add_column("Description", style="white")
+    menu_table.add_column("", style="bold cyan", width=4)
+    menu_table.add_column("Opción", style="bold white", width=25)
+    menu_table.add_column("Descripción", style="dim")
 
     if videos:
-        menu_table.add_row("1", "Process a video")
-        menu_table.add_row("2", "Download new video")
-        menu_table.add_row("3", "Cleanup project data")
-        menu_table.add_row("4", "Full Pipeline (auto)")
-        menu_table.add_row("5", "Exit")
+        menu_table.add_row("[bold cyan][1][/bold cyan]", "Procesar un video", "Transcribir, clips, copys, exportar")
+        menu_table.add_row("[bold cyan][2][/bold cyan]", "Agregar video", "YouTube o descargar desde ~/Downloads")
+        menu_table.add_row("[bold cyan][3][/bold cyan]", "Limpiar proyecto", "Liberar espacio y limpiar cache")
+        menu_table.add_row("[bold cyan][4][/bold cyan]", "Pipeline completo", "Automatizar todo el flujo")
+        menu_table.add_row("[bold red][5][/bold red]", "Salir", "Cerrar CLIPER")
         opciones = ["1", "2", "3", "4", "5"]
     else:
-        menu_table.add_row("1", "Download new video")
-        menu_table.add_row("2", "Cleanup project data")
-        menu_table.add_row("3", "Exit")
+        menu_table.add_row("[bold cyan][1][/bold cyan]", "Agregar video", "YouTube o descargar desde ~/Downloads")
+        menu_table.add_row("[bold cyan][2][/bold cyan]", "Limpiar proyecto", "Liberar espacio y limpiar cache")
+        menu_table.add_row("[bold red][3][/bold red]", "Salir", "Cerrar CLIPER")
         opciones = ["1", "2", "3"]
 
-    console.print(Panel(menu_table, title="[bold]Main Menu[/bold]", border_style="cyan"))
+    # Nota: El último número siempre es "Salir" en menú principal
+    # Esta es la única excepción (no es "Volver" porque es el nivel más alto)
+
+    console.print(Panel(
+        menu_table,
+        title="[bold cyan]━━ MENÚ PRINCIPAL ━━[/bold cyan]",
+        border_style="cyan",
+        padding=(1, 1)
+    ))
     console.print()
 
     opcion = Prompt.ask(
-        "[bold cyan]Choose an option[/bold cyan]",
+        "[bold cyan]Elige una opción[/bold cyan]",
         choices=opciones,
         default=opciones[0]
     )
@@ -209,20 +400,57 @@ def menu_principal(videos: List[Dict], state_manager) -> str:
     return opcion
 
 
-def opcion_descargar_video(downloader, state_manager):
+def opcion_agregar_video(downloader, state_manager):
     """
-    Descargo un nuevo video de YouTube
+    Agrega un video al proyecto desde YouTube o carpeta local (~/Downloads/)
     """
     console.clear()
     mostrar_banner()
 
     console.print(Panel(
-        "[bold]Download New Video[/bold]\nProvide a YouTube URL to download",
+        "[bold]Agregar Video[/bold]\nYouTube o importar desde ~/Downloads/",
         border_style="cyan"
     ))
     console.print()
 
-    url = Prompt.ask("[cyan]YouTube URL[/cyan]").strip()
+    # Submenú: elegir fuente
+    menu_table = Table(show_header=False, box=box.ROUNDED, border_style="cyan", padding=(0, 2))
+    menu_table.add_column("Opción", style="bold cyan", width=8)
+    menu_table.add_column("Descripción", style="white")
+
+    menu_table.add_row("1", "Descargar desde YouTube")
+    menu_table.add_row("2", "Importar desde ~/Downloads/")
+    menu_table.add_row("3", "Volver al menú anterior")
+
+    console.print(menu_table)
+    console.print()
+
+    opcion = Prompt.ask(
+        "[bold cyan]¿De dónde?[/bold cyan]",
+        choices=["1", "2", "3"],
+        default="3"
+    )
+
+    if opcion == "1":
+        _agregar_video_youtube(downloader, state_manager)
+    elif opcion == "2":
+        _agregar_video_local(state_manager)
+    # opcion == "3": volver (solo return)
+
+
+def _agregar_video_youtube(downloader, state_manager):
+    """
+    Descargo un nuevo video de YouTube
+    """
+    console.print()
+
+    console.print(Panel(
+        "[bold]Descargar de YouTube[/bold]\nProporciona la URL del video",
+        border_style="cyan"
+    ))
+    console.print()
+
+    url = Prompt.ask("[cyan]URL de YouTube[/cyan]").strip()
 
     if not url:
         console.print("[red]Error: No URL provided[/red]")
@@ -245,31 +473,58 @@ def opcion_descargar_video(downloader, state_manager):
         description = get_preset_description(key)
         presets_table.add_row(str(idx), name, description)
 
+    # Agregar opción de volver
+    volver_option = len(presets) + 1
+    presets_table.add_row(str(volver_option), "Volver al menú anterior", "")
+
     console.print(presets_table)
     console.print()
 
     content_choice = Prompt.ask(
-        "[cyan]Select content type[/cyan]",
-        choices=[str(i) for i in range(1, len(presets) + 1)],
+        "[cyan]Selecciona tipo de contenido[/cyan]",
+        choices=[str(i) for i in range(1, volver_option + 1)],
         default="3"  # Livestream es común
     )
+
+    # Si elige volver
+    if int(content_choice) == volver_option:
+        return
 
     content_type = preset_keys[int(content_choice) - 1]
     preset = get_preset(content_type)
 
-    console.print(f"\n[green]✓ Selected:[/green] {presets[content_type]}")
+    console.print(f"\n[green]✓ Seleccionado:[/green] {presets[content_type]}")
     console.print(f"[dim]{preset['use_case']}[/dim]")
 
     console.print()
 
     try:
-        with console.status("[cyan]Downloading video...[/cyan]", spinner="dots"):
-            path = downloader.download(url, quality="best")
+        # Crear progress tracker
+        progress = OperationProgress("Downloading video from YouTube", total_steps=100)
+        progress.add_log("Initializing YouTube downloader", "INFO")
+        progress.update(5, "Fetching video info...")
+
+        progress.add_log("Getting video metadata...", "PROGRESS")
+        progress.update(15, "Getting video metadata...")
+
+        progress.add_log("Selecting best quality", "PROGRESS")
+        progress.update(25, "Selecting quality...")
+
+        progress.add_log("Starting download", "PROGRESS")
+        progress.update(35, "Downloading...")
+
+        path = downloader.download(url, quality="best")
 
         if path:
+            progress.add_log("Download complete", "SUCCESS")
+            progress.update(90, "Processing metadata...")
+
             # Registro el video en el state manager con metadata de contenido
             video_file = Path(path)
             video_id = video_file.stem
+
+            progress.add_log(f"Registering video: {video_file.name}", "PROGRESS")
+            progress.update(95, "Registering in state...")
 
             state_manager.register_video(
                 video_id,
@@ -278,17 +533,22 @@ def opcion_descargar_video(downloader, state_manager):
                 preset=preset  # Y el preset completo
             )
 
+            progress.add_log("Video registered successfully", "SUCCESS")
+            progress.update(100, "Complete! ✓")
+            progress.show()
+
+            console.print()
             console.print(Panel(
-                f"[green]✓ Video downloaded successfully[/green]\n\n"
-                f"File: {video_file.name}\n"
-                f"Location: {path}",
-                title="[bold green]Success[/bold green]",
+                f"[green]✓ Video descargado exitosamente[/green]\n\n"
+                f"Archivo: {video_file.name}\n"
+                f"Ubicación: {path}",
+                title="[bold green]Éxito[/bold green]",
                 border_style="green"
             ))
 
             # Pregunto si quiere continuar con transcripción
             console.print()
-            if Confirm.ask("[cyan]Would you like to transcribe this video now?[/cyan]"):
+            if Confirm.ask("[cyan]¿Deseas transcribir este video ahora?[/cyan]"):
                 # Creo el dict de video para pasarlo a la función
                 video_dict = {
                     'filename': video_file.name,
@@ -298,18 +558,133 @@ def opcion_descargar_video(downloader, state_manager):
                 opcion_transcribir_video(video_dict, state_manager)
                 return  # Retorno para que no pida ENTER dos veces
         else:
+            progress.add_log("Download failed - no file returned", "ERROR")
+            progress.update(100, "Failed ✗")
+            progress.show()
+
+            console.print()
             console.print(Panel(
-                "[red]Download failed. Check the logs above.[/red]",
+                "[red]La descarga falló. Verifica los logs arriba.[/red]",
                 border_style="red"
             ))
 
     except KeyboardInterrupt:
-        console.print("\n[yellow]Download cancelled by user[/yellow]")
+        progress.add_log("Download cancelled by user", "WARNING")
+        progress.update(100, "Cancelled ✗")
+        progress.show()
+        console.print("\n[yellow]Descarga cancelada por el usuario[/yellow]")
     except Exception as e:
+        progress.add_log(f"Error: {str(e)}", "ERROR")
+        progress.update(100, f"Error ✗")
+        progress.show()
         console.print(f"\n[red]Error: {e}[/red]")
 
+    # Solo mostrar opción de volver si el usuario no fue ya a transcribir
+    # (si fue a transcribir, la función regresa antes de acá)
     console.print()
-    Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
+    Prompt.ask("[dim]Presiona ENTER para volver[/dim]", default="")
+
+
+def _agregar_video_local(state_manager):
+    """
+    Importa un video desde ~/Downloads/
+
+    FLUJO:
+    1. Detectar archivos .mp4 y .mov en ~/Downloads/
+    2. Mostrar lista numerada
+    3. Usuario selecciona por número
+    4. Copiar a project downloads/
+    5. Registrar en state
+    """
+    console.print()
+
+    importer = LocalVideoImporter()
+
+    # Listar videos disponibles
+    available_videos = importer.list_available_videos(limit=15)
+
+    if not available_videos:
+        console.print(Panel(
+            "[yellow]No hay videos en ~/Downloads/[/yellow]\n\n"
+            "Coloca archivos .mp4 o .mov en tu carpeta Downloads",
+            border_style="yellow"
+        ))
+        console.print()
+        Prompt.ask("[dim]Presiona ENTER para volver[/dim]", default="")
+        return
+
+    # Actualizar para último número = volver
+    # (se hace en el menú de selección abajo)
+
+    # Mostrar tabla de videos
+    console.print("[bold]Videos disponibles en ~/Downloads/:[/bold]\n")
+
+    videos_table = Table(show_header=False, box=None, padding=(0, 2))
+    videos_table.add_column(style="cyan", width=6)
+    videos_table.add_column(style="white")
+    videos_table.add_column(style="dim", justify="right")
+
+    for idx, video in enumerate(available_videos, 1):
+        size_display = f"{video['size_mb']:.0f} MB" if video['size_mb'] < 1024 else f"{video['size_mb'] / 1024:.1f} GB"
+        videos_table.add_row(str(idx), video['name'], size_display)
+
+    videos_table.add_row(str(len(available_videos) + 1), "[dim]Cancelar[/dim]", "")
+
+    console.print(videos_table)
+    console.print()
+
+    # Usuario elige
+    choice = Prompt.ask(
+        "[bold cyan]Selecciona video[/bold cyan]",
+        choices=[str(i) for i in range(1, len(available_videos) + 2)],
+        default=str(len(available_videos) + 1)
+    )
+
+    choice_idx = int(choice) - 1
+
+    # Validar selección
+    if choice_idx == len(available_videos):
+        console.print("[yellow]Cancelado[/yellow]")
+        return
+
+    selected_video = available_videos[choice_idx]
+
+    # Importar
+    console.print()
+    with console.status(f"[cyan]Importando {selected_video['name']}...[/cyan]", spinner="dots"):
+        result = importer.import_video(selected_video['path'], state_manager)
+
+    if result:
+        video_file = Path(result)
+        video_id = video_file.stem
+
+        console.print(Panel(
+            f"[green]✓ Video importado exitosamente[/green]\n\n"
+            f"Archivo: {video_file.name}\n"
+            f"Ubicación: {result}",
+            title="[bold green]Éxito[/bold green]",
+            border_style="green"
+        ))
+
+        # Pregunto si quiere transcribir
+        console.print()
+        if Confirm.ask("[cyan]¿Deseas transcribir este video ahora?[/cyan]"):
+            video_dict = {
+                'filename': video_file.name,
+                'path': result,
+                'video_id': video_id
+            }
+            opcion_transcribir_video(video_dict, state_manager)
+            return
+    else:
+        console.print(Panel(
+            "[red]Error al importar el video[/red]\n\n"
+            "Verifica los logs para más detalles",
+            border_style="red"
+        ))
+
+    console.print()
+    Prompt.ask("[dim]Presiona ENTER para volver[/dim]", default="")
 
 
 def opcion_procesar_video(videos: List[Dict], state_manager):
@@ -319,7 +694,7 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
     console.clear()
     mostrar_banner()
 
-    console.print("[bold]Select a video to process:[/bold]\n")
+    console.print("[bold]Selecciona un video para procesar:[/bold]\n")
 
     # Muestro los videos numerados
     for idx, video in enumerate(videos, 1):
@@ -327,11 +702,21 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
 
     console.print()
 
+    # PATRÓN: Último número siempre es "Volver"
+    num_videos = len(videos)
+    console.print(f"  {num_videos + 1}. Volver al menú anterior")
+    console.print()
+
     # Pido al usuario que elija
     seleccion = Prompt.ask(
-        "[cyan]Video number[/cyan]",
-        choices=[str(i) for i in range(1, len(videos) + 1)]
+        "[cyan]Número de video[/cyan]",
+        choices=[str(i) for i in range(1, num_videos + 2)],
+        default=str(num_videos + 1)
     )
+
+    # Si selecciona "Volver"
+    if int(seleccion) == num_videos + 1:
+        return
 
     video_seleccionado = videos[int(seleccion) - 1]
     video_id = video_seleccionado['video_id']
@@ -346,46 +731,47 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
         mostrar_banner()
 
         # Muestro opciones según el estado
-        console.print(f"\n[bold]Processing: {video_seleccionado['filename']}[/bold]\n")
+        console.print(f"\n[bold]Procesando: {video_seleccionado['filename']}[/bold]\n")
 
         # Muestro el estado actual
         if state:
             status_parts = []
             if state['transcribed']:
-                status_parts.append("[green]✓ Transcribed[/green]")
+                status_parts.append("[green]✓ Transcrito[/green]")
             if state['clips_generated']:
                 num_clips = len(state.get('clips', []))
-                status_parts.append(f"[green]✓ {num_clips} clips generated[/green]")
+                status_parts.append(f"[green]✓ {num_clips} clips generados[/green]")
             if state.get('clips_exported', False):
                 num_exported = len(state.get('exported_clips', []))
                 aspect = state.get('export_aspect_ratio', 'original')
-                status_parts.append(f"[green]✓ {num_exported} clips exported ({aspect})[/green]")
+                status_parts.append(f"[green]✓ {num_exported} clips exportados ({aspect})[/green]")
 
             if status_parts:
-                console.print("Status: " + " | ".join(status_parts))
+                console.print("Estado: " + " | ".join(status_parts))
                 console.print()
 
         # Creo menú de acciones disponibles
         actions_table = Table(show_header=False, box=box.ROUNDED, border_style="cyan", padding=(0, 2))
-        actions_table.add_column("Option", style="bold cyan", width=8)
-        actions_table.add_column("Description", style="white")
+        actions_table.add_column("Opción", style="bold cyan", width=8)
+        actions_table.add_column("Descripción", style="white")
 
         actions = []
 
         if state and state['transcribed']:
-            actions.append(("1", "Re-transcribe video"))
-            actions.append(("2", "Generate/Regenerate clips"))
+            actions.append(("1", "Re-transcribir video"))
+            actions.append(("2", "Generar/Regenerar clips"))
 
             # Si ya tengo clips, ofrezco más opciones
             if state.get('clips_generated', False):
-                actions.append(("3", "Generate AI copies (auto-classify + captions)"))
-                actions.append(("4", "Export clips to video files"))
-                actions.append(("5", "Back to menu"))
-            else:
-                actions.append(("3", "Back to menu"))
+                actions.append(("3", "Generar copys IA (clasificación + subtítulos)"))
+                actions.append(("4", "Exportar clips a archivos de video"))
+
         else:
-            actions.append(("1", "Transcribe video"))
-            actions.append(("2", "Back to menu"))
+            actions.append(("1", "Transcribir video"))
+
+        # PATRÓN: Último número siempre es "Volver al menú anterior"
+        next_option_num = len(actions) + 1
+        actions.append((str(next_option_num), "Volver al menú anterior"))
 
         for option, desc in actions:
             actions_table.add_row(option, desc)
@@ -395,39 +781,32 @@ def opcion_procesar_video(videos: List[Dict], state_manager):
 
         choices = [opt for opt, _ in actions]
         action = Prompt.ask(
-            "[bold cyan]Choose an action[/bold cyan]",
+            "[bold cyan]Elige una acción[/bold cyan]",
             choices=choices,
-            default=choices[0]
+            default=str(next_option_num)  # Default = volver
         )
+
+        # Validar si es "Volver"
+        if action == str(next_option_num):
+            break  # Salir del loop y volver al menú anterior
 
         # Ejecuto la acción elegida
         if state and state['transcribed']:
             if action == "1":
                 opcion_transcribir_video(video_seleccionado, state_manager)
-                # Continúa el loop para refrescar el menu
             elif action == "2":
                 opcion_generar_clips(video_seleccionado, state_manager)
-                # Continúa el loop para refrescar el menu
             elif action == "3":
                 if state['clips_generated']:
                     opcion_generar_copies(video_seleccionado, state_manager)
-                    # Continúa el loop para refrescar el menu
-                else:
-                    return  # Back to main menu
             elif action == "4":
                 if state['clips_generated']:
                     opcion_exportar_clips(video_seleccionado, state_manager)
-                    # Continúa el loop para refrescar el menu
-                else:
-                    return  # Back to main menu
-            elif action == "5":
-                return  # Back to main menu
+            # El loop continúa para refrescar el menú
         else:
             if action == "1":
                 opcion_transcribir_video(video_seleccionado, state_manager)
-                # Continúa el loop para refrescar el menu
-            elif action == "2":
-                return  # Back to main menu
+            # El loop continúa para refrescar el menú
 
 
 def opcion_transcribir_video(video: Dict, state_manager):
@@ -474,19 +853,42 @@ def opcion_transcribir_video(video: Dict, state_manager):
     model_options.add_column(style="white")
     model_options.add_column(style="dim")
 
-    model_options.add_row("tiny", "Fastest", "~1min for 1hr video")
-    model_options.add_row("base", "Balanced", "~5min for 1hr video")
-    model_options.add_row("small", "Accurate", "~10min for 1hr video")
-    model_options.add_row("medium", "Very accurate", "~20min for 1hr video")
+    model_options.add_row("1", "tiny", "Fastest - ~1min for 1hr video")
+    model_options.add_row("2", "base", "Balanced - ~5min for 1hr video")
+    model_options.add_row("3", "small", "Accurate - ~10min for 1hr video")
+    model_options.add_row("4", "medium", "Very accurate - ~20min for 1hr video")
+    model_options.add_row("5", "Volver al menú anterior", "")
 
     console.print(model_options)
     console.print()
 
-    model_size = Prompt.ask(
-        "[cyan]Model size[/cyan]",
-        choices=["tiny", "base", "small", "medium"],
-        default=suggested_model  # Usa el modelo sugerido del preset
+    # Mapeo de modelo a opción numérica (para el default)
+    model_to_option = {
+        "tiny": "1",
+        "base": "2",
+        "small": "3",
+        "medium": "4"
+    }
+    default_option = model_to_option.get(suggested_model, "2")  # Default a "base" (opción 2)
+
+    model_choice = Prompt.ask(
+        "[cyan]Tamaño del modelo[/cyan]",
+        choices=["1", "2", "3", "4", "5"],
+        default=default_option
     )
+
+    # Si elige volver
+    if model_choice == "5":
+        return
+
+    # Mapeo de opción numérica a modelo
+    option_to_model = {
+        "1": "tiny",
+        "2": "base",
+        "3": "small",
+        "4": "medium"
+    }
+    model_size = option_to_model[model_choice]
 
     # Idioma
     console.print()
@@ -529,12 +931,23 @@ def opcion_transcribir_video(video: Dict, state_manager):
         return
 
     try:
+        # Progress tracker para transcripción
+        progress = OperationProgress("Transcribing with WhisperX", total_steps=100)
+        progress.add_log(f"Video: {video['filename']}", "INFO")
+        progress.add_log(f"Model size: {model_size}", "INFO")
+        progress.update(5, "Loading model...")
+
         # Creo el transcriber
-        console.print("\n[cyan]Loading Whisper model...[/cyan]")
+        progress.add_log("Initializing Whisper model...", "PROGRESS")
+        progress.update(10, "Loading Whisper model...")
         transcriber = Transcriber(model_size=model_size)
 
+        progress.add_log(f"Model loaded: {model_size}", "SUCCESS")
+        progress.update(20, "Model loaded")
+
         # Transcribo
-        console.print(f"[cyan]Transcribing {video['filename']}...[/cyan]\n")
+        progress.add_log("Starting transcription...", "PROGRESS")
+        progress.update(25, "Transcribing audio...")
 
         transcript_path = transcriber.transcribe(
             video_path=video_path,
@@ -543,11 +956,22 @@ def opcion_transcribir_video(video: Dict, state_manager):
         )
 
         if transcript_path:
+            progress.add_log("Transcription complete", "SUCCESS")
+            progress.update(80, "Processing results...")
+
             # Actualizo el estado
+            progress.add_log("Updating state manager...", "PROGRESS")
+            progress.update(85, "Saving state...")
             state_manager.mark_transcribed(video_id, transcript_path)
 
             # Obtengo resumen de la transcripción
+            progress.add_log("Generating summary...", "PROGRESS")
+            progress.update(90, "Generating summary...")
             summary = transcriber.get_transcript_summary(transcript_path)
+
+            progress.add_log(f"Summary: {summary['num_segments']} segments, {summary['total_words']} words", "SUCCESS")
+            progress.update(100, "Complete! ✓")
+            progress.show()
 
             console.print()
             console.print(Panel(
@@ -566,14 +990,25 @@ def opcion_transcribir_video(video: Dict, state_manager):
             console.print(f"[dim]{summary['first_text']}[/dim]")
 
         else:
+            progress.add_log("Transcription failed - no output", "ERROR")
+            progress.update(100, "Failed ✗")
+            progress.show()
+
+            console.print()
             console.print(Panel(
                 "[red]Transcription failed. Check the logs above.[/red]",
                 border_style="red"
             ))
 
     except KeyboardInterrupt:
+        progress.add_log("Transcription cancelled by user", "WARNING")
+        progress.update(100, "Cancelled ✗")
+        progress.show()
         console.print("\n[yellow]Transcription cancelled by user[/yellow]")
     except Exception as e:
+        progress.add_log(f"Error: {str(e)}", "ERROR")
+        progress.update(100, "Error ✗")
+        progress.show()
         console.print(f"\n[red]Error: {e}[/red]")
 
     console.print()
@@ -649,15 +1084,20 @@ def opcion_generar_clips(video: Dict, state_manager):
     duration_options.add_row("2", "Medium clips", "30-90s (Reels/Stories)")
     duration_options.add_row("3", "Long clips", "60-180s (YouTube)")
     duration_options.add_row("4", "Custom", f"Use preset: {suggested_min}-{suggested_max}s")
+    duration_options.add_row("5", "Volver al menú anterior", "")
 
     console.print(duration_options)
     console.print()
 
     duration_choice = Prompt.ask(
-        "[cyan]Clip duration preset[/cyan]",
-        choices=["1", "2", "3", "4"],
+        "[cyan]Preset de duración de clips[/cyan]",
+        choices=["1", "2", "3", "4", "5"],
         default="4"  # Default usa el preset del content type
     )
+
+    # Si elige volver
+    if duration_choice == "5":
+        return
 
     # Mapeo de presets
     duration_presets = {
@@ -665,6 +1105,7 @@ def opcion_generar_clips(video: Dict, state_manager):
         "2": (30, 90),   # Medium
         "3": (60, 180),  # Long
         "4": (suggested_min, suggested_max)  # Del content type
+        # "5": Volver (manejado arriba)
     }
 
     min_duration, max_duration = duration_presets[duration_choice]
@@ -707,15 +1148,28 @@ def opcion_generar_clips(video: Dict, state_manager):
         return
 
     try:
+        # Progress tracker para clip generation
+        progress = OperationProgress("Generating clips with ClipsAI", total_steps=100)
+        progress.add_log(f"Video: {video['filename']}", "INFO")
+        progress.add_log(f"Duration range: {min_duration}-{max_duration}s", "INFO")
+        progress.add_log(f"Max clips: {max_clips}", "INFO")
+        progress.update(5, "Initializing...")
+
         # Creo el generador de clips
-        console.print("\n[cyan]Initializing ClipsAI...[/cyan]")
+        progress.add_log("Initializing ClipsAI engine...", "PROGRESS")
+        progress.update(10, "Loading ClipsAI...")
+
         clips_gen = ClipsGenerator(
             min_clip_duration=min_duration,
             max_clip_duration=max_duration
         )
 
+        progress.add_log("ClipsAI loaded successfully", "SUCCESS")
+        progress.update(15, "ClipsAI ready")
+
         # Genero los clips
-        console.print(f"[cyan]Analyzing transcript and detecting clips...[/cyan]\n")
+        progress.add_log("Analyzing transcript for topic changes...", "PROGRESS")
+        progress.update(20, "Analyzing transcript...")
 
         clips = clips_gen.generate_clips(
             transcript_path=transcript_path,
@@ -724,14 +1178,29 @@ def opcion_generar_clips(video: Dict, state_manager):
         )
 
         if clips:
+            progress.add_log(f"Detected {len(clips)} clips", "SUCCESS")
+            progress.update(60, "Saving metadata...")
+
             # Guardo la metadata de los clips
+            progress.add_log("Saving clips metadata...", "PROGRESS")
+            progress.update(70, "Saving metadata...")
+
             clips_metadata_path = clips_gen.save_clips_metadata(
                 clips=clips,
                 video_id=video_id
             )
 
+            progress.add_log("Metadata saved", "SUCCESS")
+            progress.update(80, "Updating state...")
+
             # Actualizo el estado
+            progress.add_log("Updating state manager...", "PROGRESS")
+            progress.update(85, "Updating state...")
             state_manager.mark_clips_generated(video_id, clips, clips_metadata_path)
+
+            progress.add_log("Clip generation complete", "SUCCESS")
+            progress.update(100, "Complete! ✓")
+            progress.show()
 
             console.print()
             console.print(Panel(
@@ -784,6 +1253,11 @@ def opcion_generar_clips(video: Dict, state_manager):
                 console.print(f"\n[dim]... and {len(clips) - 10} more clips[/dim]")
 
         else:
+            progress.add_log("Clip generation failed - no clips detected", "ERROR")
+            progress.update(100, "Failed ✗")
+            progress.show()
+
+            console.print()
             console.print(Panel(
                 "[red]Clip generation failed[/red]\n\n"
                 "Possible reasons:\n"
@@ -794,8 +1268,14 @@ def opcion_generar_clips(video: Dict, state_manager):
             ))
 
     except KeyboardInterrupt:
+        progress.add_log("Clip generation cancelled by user", "WARNING")
+        progress.update(100, "Cancelled ✗")
+        progress.show()
         console.print("\n[yellow]Clip generation cancelled by user[/yellow]")
     except Exception as e:
+        progress.add_log(f"Error: {str(e)}", "ERROR")
+        progress.update(100, "Error ✗")
+        progress.show()
         console.print(f"\n[red]Error: {e}[/red]")
         console.print("[dim]Check the logs for more details[/dim]")
 
@@ -842,24 +1322,29 @@ def opcion_generar_copies(video: Dict, state_manager):
     console.print()
 
     # Selección de modelo
-    console.print("[bold]Model Selection:[/bold]\n")
+    console.print("[bold]Selección de Modelo:[/bold]\n")
 
     model_table = Table(show_header=False, box=None, padding=(0, 2))
     model_table.add_column(style="cyan")
     model_table.add_column(style="white")
     model_table.add_column(style="dim")
 
-    model_table.add_row("1", "Gemini 2.5 Flash", "Your model (recommended)")
-    model_table.add_row("2", "Gemini 1.5 Pro", "Alternative")
+    model_table.add_row("1", "Gemini 2.5 Flash", "Tu modelo (recomendado)")
+    model_table.add_row("2", "Gemini 1.5 Pro", "Alternativa")
+    model_table.add_row("3", "Volver al menú anterior", "")
 
     console.print(model_table)
     console.print()
 
     model_choice = Prompt.ask(
-        "[cyan]Choose model[/cyan]",
-        choices=["1", "2"],
+        "[cyan]Elige modelo[/cyan]",
+        choices=["1", "2", "3"],
         default="1"
     )
+
+    # Si elige volver
+    if model_choice == "3":
+        return
 
     # Intentar diferentes nombres de modelo para Gemini 2.5 Flash
     model_map = {
@@ -879,28 +1364,39 @@ def opcion_generar_copies(video: Dict, state_manager):
         return
 
     try:
-        console.print()
-        console.print("[cyan]Generating AI copies...[/cyan]\n")
+        # Progress tracker para copy generation
+        progress = OperationProgress("Generating AI copies with LangGraph + Gemini", total_steps=100)
+        progress.add_log(f"Video: {video['filename']}", "INFO")
+        progress.add_log(f"Model: {model}", "INFO")
+        progress.update(5, "Initializing LangGraph pipeline...")
+
+        if logger:
+            logger.info(f"Starting copy generation for video_id={video_id}, model={model}")
+
+        progress.add_log("Loading clips from metadata...", "PROGRESS")
+        progress.update(10, "Loading clips...")
 
         # Generar copies
+        progress.add_log("Starting copy generation pipeline...", "PROGRESS")
+        progress.update(15, "Generating copies...")
+
         result = generate_copys_for_video(
             video_id=video_id,
             model=model
         )
 
-        # Mostrar todos los logs primero
+        # Integrar logs del resultado en el progress
         if result.get('logs'):
-            console.print()
-            console.print("[bold]Process logs:[/bold]")
-            for log in result['logs']:
-                if '❌' in log or 'Error' in log:
-                    console.print(f"[red]{log}[/red]")
-                elif '⚠️' in log:
-                    console.print(f"[yellow]{log}[/yellow]")
-                elif '✅' in log:
-                    console.print(f"[green]{log}[/green]")
+            for log_msg in result['logs']:
+                # Determinar el nivel basado en el contenido del log
+                if '❌' in log_msg or 'Error' in log_msg:
+                    progress.add_log(log_msg, "ERROR")
+                elif '⚠️' in log_msg:
+                    progress.add_log(log_msg, "WARNING")
+                elif '✅' in log_msg:
+                    progress.add_log(log_msg, "SUCCESS")
                 else:
-                    console.print(f"[dim]{log}[/dim]")
+                    progress.add_log(log_msg, "PROGRESS")
 
         console.print()
 
@@ -910,7 +1406,11 @@ def opcion_generar_copies(video: Dict, state_manager):
             total_classified = result['metrics'].get('total_classified', total_generated)
             is_partial = total_generated < total_classified
 
+            progress.add_log(f"Copy generation complete: {total_generated}/{total_classified}", "SUCCESS")
+            progress.update(85, "Finalizing...")
+
             if is_partial:
+                progress.add_log("Partial success - some copies failed validation", "WARNING")
                 title_text = "[bold yellow]Partial Success[/bold yellow]"
                 border_color = "yellow"
                 status_line = f"[yellow]⚠️  Generación parcial: {total_generated}/{total_classified} copies[/yellow]"
@@ -919,6 +1419,10 @@ def opcion_generar_copies(video: Dict, state_manager):
                 border_color = "green"
                 status_line = f"[green]✓ AI copies generated successfully![/green]"
 
+            progress.update(100, "Complete! ✓")
+            progress.show()
+
+            console.print()
             console.print(Panel(
                 f"{status_line}\n\n"
                 f"Total copies: {total_generated}\n"
@@ -934,6 +1438,11 @@ def opcion_generar_copies(video: Dict, state_manager):
             ))
 
         else:
+            progress.add_log(f"Copy generation failed: {result.get('error', 'Unknown error')}", "ERROR")
+            progress.update(100, "Failed ✗")
+            progress.show()
+
+            console.print()
             console.print(Panel(
                 f"[red]Copy generation failed[/red]\n\n"
                 f"Error: {result.get('error', 'Unknown error')}\n\n"
@@ -947,10 +1456,20 @@ def opcion_generar_copies(video: Dict, state_manager):
             ))
 
     except KeyboardInterrupt:
+        progress.add_log("Copy generation cancelled by user", "WARNING")
+        progress.update(100, "Cancelled ✗")
+        progress.show()
         console.print("\n[yellow]Copy generation cancelled by user[/yellow]")
+        if logger:
+            logger.warning("Copy generation cancelled by user")
     except Exception as e:
+        progress.add_log(f"Error: {str(e)}", "ERROR")
+        progress.update(100, "Error ✗")
+        progress.show()
         console.print(f"\n[red]Error: {e}[/red]")
         console.print("[dim]Check that GOOGLE_API_KEY is set in your environment[/dim]")
+        if logger:
+            logger.exception(f"Exception during copy generation: {e}")
 
     console.print()
     Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
@@ -1048,18 +1567,23 @@ def opcion_exportar_clips(video: Dict, state_manager):
     aspect_options.add_column(style="white")
     aspect_options.add_column(style="dim")
 
-    aspect_options.add_row("1", "Original", "Keep video aspect ratio (usually 16:9)")
-    aspect_options.add_row("2", "Vertical (9:16)", "For TikTok, Reels, Shorts")
-    aspect_options.add_row("3", "Square (1:1)", "For Instagram posts")
+    aspect_options.add_row("1", "Original", "Mantener relación original (usualmente 16:9)")
+    aspect_options.add_row("2", "Vertical (9:16)", "Para TikTok, Reels, Shorts")
+    aspect_options.add_row("3", "Cuadrado (1:1)", "Para posts de Instagram")
+    aspect_options.add_row("4", "Volver al menú anterior", "")
 
     console.print(aspect_options)
     console.print()
 
     aspect_choice = Prompt.ask(
-        "[cyan]Aspect ratio[/cyan]",
-        choices=["1", "2", "3"],
+        "[cyan]Relación de aspecto[/cyan]",
+        choices=["1", "2", "3", "4"],
         default="2"  # Default: vertical para redes sociales
     )
+
+    # Si elige volver
+    if aspect_choice == "4":
+        return
 
     # Mapeo de aspect ratios
     aspect_map = {
@@ -1086,12 +1610,17 @@ def opcion_exportar_clips(video: Dict, state_manager):
             console.print("\n[bold]Face Tracking Strategy:[/bold]")
             console.print("  [cyan]1.[/cyan] keep_in_frame (recommended) - Minimal movement, professional look")
             console.print("  [cyan]2.[/cyan] centered - Always center on face (can be jittery)")
+            console.print("  [cyan]3.[/cyan] Volver al menú anterior")
 
             style_choice = Prompt.ask(
                 "\n[cyan]Choice[/cyan]",
-                choices=["1", "2"],
+                choices=["1", "2", "3"],
                 default="1"
             )
+
+            # Si elige volver
+            if style_choice == "3":
+                return
 
             face_tracking_strategy = "keep_in_frame" if style_choice == "1" else "centered"
 
@@ -1136,11 +1665,30 @@ def opcion_exportar_clips(video: Dict, state_manager):
         )
         if advanced_branding:
             logo_path = Prompt.ask("Path to logo file", default=logo_path)
-            logo_position = Prompt.ask(
-                "Logo position",
-                choices=["top-right", "top-left", "bottom-right", "bottom-left"],
-                default=logo_position
+
+            console.print("\n[bold]Logo Position:[/bold]")
+            console.print("  [cyan]1.[/cyan] top-right (default)")
+            console.print("  [cyan]2.[/cyan] top-left")
+            console.print("  [cyan]3.[/cyan] bottom-right")
+            console.print("  [cyan]4.[/cyan] bottom-left")
+            console.print("  [cyan]5.[/cyan] Volver al menú anterior")
+
+            position_choice = Prompt.ask(
+                "\n[cyan]Choice[/cyan]",
+                choices=["1", "2", "3", "4", "5"],
+                default="1"
             )
+
+            if position_choice == "5":
+                logo_position = "top-right"  # Reset to default if cancelled
+            else:
+                position_map = {
+                    "1": "top-right",
+                    "2": "top-left",
+                    "3": "bottom-right",
+                    "4": "bottom-left"
+                }
+                logo_position = position_map[position_choice]
             logo_scale_str = Prompt.ask("Logo scale (e.g., 0.1 for 10% of height)", default=str(logo_scale))
             try:
                 logo_scale = float(logo_scale_str)
@@ -1150,7 +1698,7 @@ def opcion_exportar_clips(video: Dict, state_manager):
     # Pregunto si quiere subtítulos
     console.print()
     add_subtitles = Confirm.ask(
-        "[cyan]Add burned-in subtitles (English)?[/cyan]",
+        "[cyan]Add burned-in subtitles?[/cyan]",
         default=True
     )
 
@@ -1170,15 +1718,20 @@ def opcion_exportar_clips(video: Dict, state_manager):
         style_options.add_row("4", "TikTok (20px)", "Centered top")
         style_options.add_row("5", "Small (10px)", "Very small, positioned higher")
         style_options.add_row("6", "Tiny (8px)", "Extra tiny, positioned higher")
+        style_options.add_row("7", "Volver al menú anterior", "")
 
         console.print(style_options)
         console.print()
 
         style_choice = Prompt.ask(
             "[cyan]Subtitle style[/cyan]",
-            choices=["1", "2", "3", "4", "5", "6"],
+            choices=["1", "2", "3", "4", "5", "6", "7"],
             default="5"  # Default a Small ahora
         )
+
+        # Si elige volver
+        if style_choice == "7":
+            return
 
         style_map = {
             "1": "default",
@@ -1224,16 +1777,229 @@ def opcion_exportar_clips(video: Dict, state_manager):
         except ValueError:
             clips_to_export = clips[:10]
 
-    # Confirmo antes de exportar
-    console.print()
-    console.print(f"[yellow]⚠️  About to export {len(clips_to_export)} clips[/yellow]")
-    console.print(f"[dim]This may take a few minutes depending on video length[/dim]")
-    console.print()
+    # === REVIEW CONFIGURACIÓN ANTES DE EXPORTAR ===
+    aspect_ratio_display = {None: "Original", "9:16": "Vertical (9:16)", "1:1": "Cuadrado (1:1)"}
 
-    if not Confirm.ask("[cyan]Continue with export?[/cyan]", default=True):
-        console.print("[yellow]Export cancelled[/yellow]")
-        Prompt.ask("\n[dim]Press ENTER to return[/dim]", default="")
-        return
+    while True:
+        console.clear()
+        mostrar_banner()
+
+        console.print(Panel(
+            "[bold cyan]📋 EXPORT CONFIGURATION REVIEW[/bold cyan]",
+            border_style="cyan"
+        ))
+        console.print()
+
+        # Resumen de configuraciones
+        config_table = Table(show_header=False, box=None, padding=(0, 2))
+        config_table.add_column(style="dim", width=20)
+        config_table.add_column(style="white")
+
+        config_table.add_row("Aspect ratio:", aspect_ratio_display.get(aspect_ratio, "Unknown"))
+
+        if aspect_ratio == "9:16":
+            face_tracking_status = f"✓ {face_tracking_strategy}" if enable_face_tracking else "Deshabilitado"
+            config_table.add_row("Face tracking:", face_tracking_status)
+
+        logo_status = "✓ " + logo_position if add_logo else "Deshabilitado"
+        config_table.add_row("Logo:", logo_status)
+
+        subtitle_status = f"✓ {subtitle_style}" if add_subtitles else "Deshabilitado"
+        config_table.add_row("Subtitles:", subtitle_status)
+
+        config_table.add_row("Clips to export:", f"{len(clips_to_export)} de {len(clips)}")
+
+        console.print(config_table)
+        console.print()
+
+        # Opciones: cambiar, exportar, o cancelar
+        console.print("[bold]¿Qué deseas hacer?[/bold]\n")
+        console.print("  [cyan][Y][/cyan] Cambiar algo")
+        console.print("  [cyan][N][/cyan] Proceder al export")
+        console.print("  [cyan][C][/cyan] Cancelar y volver al menú anterior\n")
+
+        action = Prompt.ask(
+            "[cyan]Opción[/cyan]",
+            choices=["y", "n", "c"],
+            default="n"
+        ).lower()
+
+        if action == "c":
+            # Cancelar sin guardar - volver al menú anterior
+            console.print("[yellow]Export cancelled - volviendo al menú anterior[/yellow]")
+            Prompt.ask("\n[dim]Press ENTER to return[/dim]", default="")
+            return
+
+        elif action == "n":
+            # Proceder al export
+            console.print()
+            console.print(f"[yellow]⚠️  About to export {len(clips_to_export)} clips[/yellow]")
+            console.print(f"[dim]This may take a few minutes depending on video length[/dim]")
+            console.print()
+
+            if not Confirm.ask("[cyan]Continue with export?[/cyan]", default=True):
+                console.print("[yellow]Export cancelled[/yellow]")
+                Prompt.ask("\n[dim]Press ENTER to return[/dim]", default="")
+                return
+
+            break  # Salir del loop de review y proceder a exportar
+
+        # Si action == "y", continúa al menú de edición (abajo)
+        if action != "y":
+            continue  # Volver al inicio del while si presionó algo que no sea "y"
+
+        # Menú de edición de configuraciones
+        console.print()
+        console.print("[bold]¿Qué cambiar?[/bold]\n")
+
+        edit_options = Table(show_header=False, box=None, padding=(0, 2))
+        edit_options.add_column(style="cyan")
+        edit_options.add_column(style="white")
+
+        edit_options.add_row("1", "Aspect ratio")
+
+        if aspect_ratio == "9:16":
+            edit_options.add_row("2", "Face tracking")
+            edit_options.add_row("3", "Logo")
+            edit_options.add_row("4", "Subtitles")
+            edit_options.add_row("5", "Clips a exportar")
+            edit_options.add_row("6", "Volver a resumen")
+            edit_choices = ["1", "2", "3", "4", "5", "6"]
+        else:
+            edit_options.add_row("2", "Logo")
+            edit_options.add_row("3", "Subtitles")
+            edit_options.add_row("4", "Clips a exportar")
+            edit_options.add_row("5", "Volver a resumen")
+            edit_choices = ["1", "2", "3", "4", "5"]
+
+        console.print(edit_options)
+        console.print()
+
+        edit_choice = Prompt.ask(
+            "[cyan]Opción[/cyan]",
+            choices=edit_choices,
+            default=edit_choices[-1]
+        )
+
+        # Procesar ediciones
+        if edit_choice == "1":
+            # Editar aspect ratio
+            console.clear()
+            mostrar_banner()
+            console.print(f"\n[bold]Procesando: {video['filename']}[/bold]\n")
+            console.print("[bold]Cambiar Aspect Ratio:[/bold]\n")
+
+            aspect_options_edit = Table(show_header=False, box=None, padding=(0, 2))
+            aspect_options_edit.add_column(style="cyan")
+            aspect_options_edit.add_column(style="white")
+            aspect_options_edit.add_column(style="dim")
+
+            aspect_options_edit.add_row("1", "Original", "16:9 o según fuente")
+            aspect_options_edit.add_row("2", "Vertical", "9:16 (TikTok, Reels, Shorts)")
+            aspect_options_edit.add_row("3", "Cuadrado", "1:1 (Instagram)")
+
+            console.print(aspect_options_edit)
+            console.print()
+
+            new_aspect = Prompt.ask(
+                "[cyan]Selecciona[/cyan]",
+                choices=["1", "2", "3"],
+                default="2" if aspect_ratio == "9:16" else ("1" if aspect_ratio is None else "3")
+            )
+
+            aspect_map_edit = {"1": None, "2": "9:16", "3": "1:1"}
+            aspect_ratio = aspect_map_edit[new_aspect]
+
+            # Reset face tracking si cambió a no-vertical
+            if aspect_ratio != "9:16":
+                enable_face_tracking = False
+
+        elif edit_choice == "2" and aspect_ratio == "9:16":
+            # Editar face tracking
+            console.clear()
+            mostrar_banner()
+            console.print(f"\n[bold]Procesando: {video['filename']}[/bold]\n")
+            console.print("[bold]Face Tracking Settings:[/bold]\n")
+            console.print("  [cyan]1.[/cyan] Habilitar (keep_in_frame)")
+            console.print("  [cyan]2.[/cyan] Habilitar (centered)")
+            console.print("  [cyan]3.[/cyan] Deshabilitar\n")
+
+            ft_choice = Prompt.ask(
+                "[cyan]Selecciona[/cyan]",
+                choices=["1", "2", "3"],
+                default="1" if enable_face_tracking else "3"
+            )
+
+            if ft_choice == "1":
+                enable_face_tracking = True
+                face_tracking_strategy = "keep_in_frame"
+            elif ft_choice == "2":
+                enable_face_tracking = True
+                face_tracking_strategy = "centered"
+            else:
+                enable_face_tracking = False
+
+        elif (edit_choice == "2" and aspect_ratio != "9:16") or (edit_choice == "3" and aspect_ratio == "9:16"):
+            # Editar logo
+            console.clear()
+            mostrar_banner()
+            console.print(f"\n[bold]Procesando: {video['filename']}[/bold]\n")
+            console.print("[bold]Logo Settings:[/bold]\n")
+
+            add_logo = Confirm.ask("[cyan]Add logo overlay?[/cyan]", default=add_logo)
+
+            if add_logo and logo_position == "top-right":
+                console.print("\n  [cyan]1.[/cyan] top-right")
+                console.print("  [cyan]2.[/cyan] top-left")
+                console.print("  [cyan]3.[/cyan] bottom-right")
+                console.print("  [cyan]4.[/cyan] bottom-left\n")
+
+                pos_choice = Prompt.ask(
+                    "[cyan]Logo position[/cyan]",
+                    choices=["1", "2", "3", "4"],
+                    default="1"
+                )
+
+                logo_map = {"1": "top-right", "2": "top-left", "3": "bottom-right", "4": "bottom-left"}
+                logo_position = logo_map[pos_choice]
+
+        elif (edit_choice == "3" and aspect_ratio != "9:16") or (edit_choice == "4" and aspect_ratio == "9:16"):
+            # Editar subtítulos
+            console.clear()
+            mostrar_banner()
+            console.print(f"\n[bold]Procesando: {video['filename']}[/bold]\n")
+            console.print("[bold]Subtitle Settings:[/bold]\n")
+
+            add_subtitles = Confirm.ask("[cyan]Add subtitles?[/cyan]", default=add_subtitles)
+
+            if add_subtitles:
+                console.print()
+                style_options_edit = Table(show_header=False, box=None, padding=(0, 2))
+                style_options_edit.add_column(style="cyan")
+                style_options_edit.add_column(style="white")
+
+                styles = [("Default", "18px"), ("Bold", "22px"), ("Yellow", "20px"),
+                         ("TikTok", "20px"), ("Small", "10px"), ("Tiny", "8px")]
+                for i, (name, size) in enumerate(styles, 1):
+                    style_options_edit.add_row(str(i), f"{name} ({size})")
+
+                console.print(style_options_edit)
+                console.print()
+
+                style_choice_edit = Prompt.ask(
+                    "[cyan]Style[/cyan]",
+                    choices=["1", "2", "3", "4", "5", "6"],
+                    default="5"
+                )
+
+                style_map_edit = {
+                    "1": "default", "2": "bold", "3": "yellow",
+                    "4": "tiktok", "5": "small", "6": "tiny"
+                }
+                subtitle_style = style_map_edit[style_choice_edit]
+
+        else:  # Volver a resumen (última opción)
+            continue  # Volver al inicio del while loop
 
     try:
         console.print()
@@ -1244,12 +2010,25 @@ def opcion_exportar_clips(video: Dict, state_manager):
         # Obtengo el path de la transcripción para los subtítulos
         transcript_path = state.get('transcript_path') or state.get('transcription_path')
 
+        # Progress tracker para export
+        progress = OperationProgress("Exporting clips to video files", total_steps=100)
+        progress.add_log(f"Video: {video['filename']}", "INFO")
+        progress.add_log(f"Clips to export: {len(clips_to_export)}", "INFO")
+        progress.add_log(f"Aspect ratio: {aspect_ratio if aspect_ratio else 'Original'}", "INFO")
+        progress.add_log(f"Face tracking: {'Enabled' if enable_face_tracking else 'Disabled'}", "INFO")
+        progress.add_log(f"Subtitles: {'Enabled' if add_subtitles else 'Disabled'}", "INFO")
+        progress.update(5, "Initializing exporter...")
+
         # Mensaje informativo sobre el proceso de export
         if enable_face_tracking:
-            console.print("[cyan]Starting export with AI-powered face tracking...[/cyan]")
-            console.print("[dim]Note: Face detection may take longer than static crop[/dim]\n")
+            progress.add_log("Face tracking enabled - processing will take longer", "WARNING")
+            progress.update(10, "Loading face detection model...")
         else:
-            console.print("[cyan]Starting export...[/cyan]\n")
+            progress.add_log("Using static crop (no face tracking)", "INFO")
+            progress.update(10, "Preparing FFmpeg...")
+
+        progress.add_log("Starting clip export...", "PROGRESS")
+        progress.update(15, "Exporting clips...")
 
         # Exporto los clips
         exported_paths = exporter.export_clips(
@@ -1274,8 +2053,28 @@ def opcion_exportar_clips(video: Dict, state_manager):
         )
 
         if exported_paths:
+            progress.add_log(f"All {len(exported_paths)} clips exported successfully", "SUCCESS")
+            progress.update(85, "Updating state...")
+
             # Obtengo la carpeta donde se guardaron (todos están en la misma)
             output_folder = Path(exported_paths[0]).parent
+
+            progress.add_log(f"Location: {output_folder}", "INFO")
+            progress.update(90, "Finalizing...")
+
+            # Marco como exportado en el state manager
+            progress.add_log("Marking as exported in state manager...", "PROGRESS")
+            progress.update(95, "Saving state...")
+
+            state_manager.mark_clips_exported(
+                video_id,
+                exported_paths,
+                aspect_ratio=aspect_ratio
+            )
+
+            progress.add_log("Export complete", "SUCCESS")
+            progress.update(100, "Complete! ✓")
+            progress.show()
 
             console.print()
             console.print(Panel(
@@ -1297,14 +2096,12 @@ def opcion_exportar_clips(video: Dict, state_manager):
             if len(exported_paths) > 5:
                 console.print(f"[dim]  ... and {len(exported_paths) - 5} more[/dim]")
 
-            # Marco como exportado en el state manager
-            state_manager.mark_clips_exported(
-                video_id,
-                exported_paths,
-                aspect_ratio=aspect_ratio
-            )
-
         else:
+            progress.add_log("Export failed - no clips exported", "ERROR")
+            progress.update(100, "Failed ✗")
+            progress.show()
+
+            console.print()
             console.print(Panel(
                 "[red]Export failed[/red]\n\n"
                 "Check the logs for details about what went wrong.",
@@ -1312,8 +2109,14 @@ def opcion_exportar_clips(video: Dict, state_manager):
             ))
 
     except KeyboardInterrupt:
+        progress.add_log("Export cancelled by user", "WARNING")
+        progress.update(100, "Cancelled ✗")
+        progress.show()
         console.print("\n[yellow]Export cancelled by user[/yellow]")
     except Exception as e:
+        progress.add_log(f"Error: {str(e)}", "ERROR")
+        progress.update(100, "Error ✗")
+        progress.show()
         console.print(f"\n[red]Error: {e}[/red]")
         console.print("[dim]Check the logs for more details[/dim]")
 
@@ -1325,14 +2128,16 @@ def opcion_cleanup_project():
     """
     Flujo interactivo para limpiar artifacts del proyecto
 
-    DECISIÓN: Interactivo con confirmación obligatoria
+    DECISIÓN: 2 opciones principales claras
+    - Opción 1: Keep downloads + transcripts (re-procesamiento rápido)
+    - Opción 2: Fresh start (eliminar TODO)
     RAZÓN: Operación destructiva - prevenir eliminaciones accidentales
     """
     console.clear()
     mostrar_banner()
 
     console.print(Panel(
-        "[bold]Cleanup Project Data[/bold]\nManage and delete project artifacts",
+        "[bold]Limpiar Datos del Proyecto[/bold]\nGestiona y elimina artifacts del proyecto",
         border_style="cyan"
     ))
     console.print()
@@ -1342,46 +2147,113 @@ def opcion_cleanup_project():
     state = state_manager.get_all_videos()
 
     if not state:
-        console.print("[yellow]No project data to clean (state is empty)[/yellow]")
+        console.print("[yellow]Sin datos para limpiar (estado vacío)[/yellow]")
         console.print()
-        Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
+        Prompt.ask("[dim]Presiona ENTER para volver al menú[/dim]", default="")
         return
 
-    # Mostrar artifacts disponibles
-    console.print("[bold]Cleanable Project Data:[/bold]\n")
+    # Mostrar resumen de espacio usado
+    cleanup_manager.display_space_summary()
+    console.print()
     cleanup_manager.display_cleanable_artifacts()
     console.print()
 
-    # Opciones de cleanup
+    # Opciones de cleanup simplificadas
     menu_table = Table(show_header=False, box=box.ROUNDED, border_style="cyan", padding=(0, 2))
-    menu_table.add_column("Option", style="bold cyan", width=8)
-    menu_table.add_column("Description", style="white")
+    menu_table.add_column("Opción", style="bold cyan", width=8)
+    menu_table.add_column("Descripción", style="white")
 
-    menu_table.add_row("1", "Clean specific video")
-    menu_table.add_row("2", "Clean all outputs only (keep transcripts)")
-    menu_table.add_row("3", "Clean entire project (fresh start)")
-    menu_table.add_row("4", "Back to main menu")
+    menu_table.add_row("1", "Mantener descargas & transcripciones (re-procesar)")
+    menu_table.add_row("   ", "  └─ Elimina: metadata clips, outputs, logs, caché")
+    menu_table.add_row("2", "Inicio limpio (eliminar todo)")
+    menu_table.add_row("   ", "  └─ Elimina: TODOS los artifacts")
+    menu_table.add_row("3", "Volver al menú anterior")
 
-    console.print(Panel(menu_table, title="[bold]Cleanup Options[/bold]", border_style="cyan"))
+    console.print(Panel(menu_table, title="[bold]Opciones de Limpieza[/bold]", border_style="cyan"))
     console.print()
 
     choice = Prompt.ask(
-        "[bold cyan]Choose cleanup option[/bold cyan]",
-        choices=["1", "2", "3", "4"],
-        default="4"
+        "[bold cyan]Elige opción de limpieza[/bold cyan]",
+        choices=["1", "2", "3"],
+        default="3"
     )
 
     if choice == "1":
-        cleanup_specific_video(cleanup_manager, state)
+        cleanup_keep_downloads_and_transcripts(cleanup_manager, state)
+        # Mostrar opción de volver después de completar
+        console.print()
+        Prompt.ask("[dim]Presiona ENTER para volver[/dim]", default="")
     elif choice == "2":
-        cleanup_outputs_only(cleanup_manager, state)
-    elif choice == "3":
         cleanup_entire_project(cleanup_manager)
-    elif choice == "4":
+        # Mostrar opción de volver después de completar
+        console.print()
+        Prompt.ask("[dim]Presiona ENTER para volver[/dim]", default="")
+    # choice == "3": volver directamente (sin confirmación)
+
+
+def cleanup_keep_downloads_and_transcripts(cleanup_manager: CleanupManager, state: dict):
+    """
+    Opción 1: Mantiene descargas + transcripts, elimina TODO lo demás
+
+    CASO DE USO:
+    - Ya tienes videos descargados y transcritos
+    - Quieres cambiar prompts/modelos y re-procesar
+    - No quieres re-descargar videos (ahorra tiempo y ancho de banda)
+
+    ELIMINA:
+    - Clips metadata (clips_metadata.json)
+    - Exported clips (output/)
+    - Old logs (> 7 días)
+    - Cache (__pycache__, lock files, .DS_Store)
+
+    MANTIENE:
+    - Downloaded videos (downloads/)
+    - Transcripts (temp/*_transcript.json)
+    """
+    console.print()
+
+    # Calcular tamaño que se liberará
+    totals = cleanup_manager.get_total_sizes()
+    will_delete = (
+        totals['total_clips_metadata'] +
+        totals['total_output']
+    )
+    will_keep = (
+        totals['total_downloads'] +
+        totals['total_transcripts']
+    )
+
+    def format_size(size_bytes):
+        mb = size_bytes / 1024 / 1024
+        if mb < 0.1:
+            return f"{size_bytes / 1024:.1f} KB"
+        return f"{mb:.1f} MB"
+
+    console.print("[bold yellow]⚠️  Modo Re-procesar: Mantener Descargas & Transcripciones[/bold yellow]\n")
+
+    console.print("[bold]Se MANTIENE:[/bold]")
+    console.print(f"  ✓ Videos descargados: {format_size(totals['total_downloads'])}")
+    console.print(f"  ✓ Transcripciones: {format_size(totals['total_transcripts'])}")
+    console.print(f"  ✓ Total: {format_size(will_keep)}\n")
+
+    console.print("[bold red]Se ELIMINA:[/bold red]")
+    console.print(f"  ✗ Metadata clips: {format_size(totals['total_clips_metadata'])}")
+    console.print(f"  ✗ Clips exportados: {format_size(totals['total_output'])}")
+    console.print(f"  ✗ Logs antiguos (> 7 días)")
+    console.print(f"  ✗ Cache y residuales")
+    console.print(f"  ✗ Total a eliminar: {format_size(will_delete)}\n")
+
+    if not Confirm.ask("¿Continuar con limpieza de re-procesamiento?", default=False):
+        console.print("[yellow]Limpieza cancelada[/yellow]")
         return
 
-    console.print()
-    Prompt.ask("[dim]Press ENTER to return to menu[/dim]", default="")
+    console.print("\n[bold]Limpiando...[/bold]")
+    results = cleanup_manager.delete_all_except_downloads_and_transcripts()
+
+    success_count = sum(1 for r in results.values() if r)
+    console.print(f"\n[green]✓ Limpieza de re-procesamiento completada[/green]")
+    console.print(f"[green]Espacio liberado: {format_size(will_delete)}[/green]")
+    console.print(f"[dim]Ahora puedes re-procesar clips con diferentes configuraciones[/dim]")
 
 
 def cleanup_specific_video(cleanup_manager: CleanupManager, state: dict):
@@ -1544,35 +2416,51 @@ def cleanup_outputs_only(cleanup_manager: CleanupManager, state: dict):
 
 
 def cleanup_entire_project(cleanup_manager: CleanupManager):
-    """Fresh start - elimina TODO el proyecto"""
+    """
+    Opción 2: Fresh start - elimina TODO el proyecto
+
+    CASO DE USO:
+    - Clean slate - empezar de cero
+    - Troubleshooting - eliminar todo y reintentar
+    - Cambio de proyecto - limpiar completamente antes de nuevo proyecto
+    """
     console.print()
 
-    console.print("[bold red]WARNING: This will DELETE ALL project data:[/bold red]")
-    console.print("  - All downloaded videos")
-    console.print("  - All transcripts")
-    console.print("  - All detected clips")
-    console.print("  - All exported clips")
-    console.print("  - Project state\n")
+    totals = cleanup_manager.get_total_sizes()
 
-    # Confirmación EXTREMA - requiere escribir "DELETE ALL"
-    confirmation = Prompt.ask(
-        "[bold]Type 'DELETE ALL' to confirm[/bold]",
-        default="cancel"
-    )
+    def format_size(size_bytes):
+        mb = size_bytes / 1024 / 1024
+        if mb < 0.1:
+            return f"{size_bytes / 1024:.1f} KB"
+        return f"{mb:.1f} MB"
 
-    if confirmation != "DELETE ALL":
-        console.print("[yellow]Cleanup cancelled[/yellow]")
+    console.print("[bold red]🔥 INICIO LIMPIO: Eliminar Todo[/bold red]\n")
+
+    console.print("[bold red]Esto eliminará TODOS los datos del proyecto:[/bold red]")
+    console.print(f"  ✗ Videos descargados: {format_size(totals['total_downloads'])}")
+    console.print(f"  ✗ Transcripciones: {format_size(totals['total_transcripts'])}")
+    console.print(f"  ✗ Metadata de clips: {format_size(totals['total_clips_metadata'])}")
+    console.print(f"  ✗ Clips exportados: {format_size(totals['total_output'])}")
+    console.print(f"  ✗ Estado del proyecto (json)")
+    console.print(f"  ✗ Cache y logs\n")
+
+    console.print(f"[bold red]Espacio a liberar: {format_size(totals['total_all'])}[/bold red]\n")
+
+    # Confirmación simple - Y/N con default N
+    if not Confirm.ask("[bold red]¿Estás seguro?[/bold red]", default=False):
+        console.print("[yellow]Limpieza cancelada[/yellow]")
         return
 
-    console.print("\n[bold]Cleaning entire project...[/bold]")
+    console.print("\n[bold]Limpiando proyecto completo...[/bold]")
 
     results = cleanup_manager.delete_all_project_data()
 
     if all(results.values()):
-        console.print("\n[green]Project cleaned successfully[/green]")
-        console.print("[dim]Fresh start ready. Run CLIPER to begin.[/dim]")
+        console.print("\n[green]✓ Proyecto limpiado exitosamente[/green]")
+        console.print(f"[green]Espacio liberado: {format_size(totals['total_all'])}[/green]")
+        console.print("[dim]Inicio limpio. Ejecuta CLIPER para comenzar.[/dim]")
     else:
-        console.print("\n[yellow]Some items could not be deleted[/yellow]")
+        console.print("\n[yellow]Algunos elementos no pudieron eliminarse[/yellow]")
         for item, success in results.items():
             status = "✓" if success else "✗"
             console.print(f"  {status} {item}")
@@ -1582,7 +2470,20 @@ def main():
     """
     Función principal - loop del programa
     """
+    global logger
+    import logging
+    import warnings
+
     mostrar_banner()
+
+    # Inicializo logging a archivo (silenciosamente - solo archivo, sin consola)
+    log_filename = f"logs/cliper_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    logger = setup_logger(name="cliper", log_file=log_filename, console_output=False)
+
+    # Logs de inicialización solo a archivo (sin mostrar en consola)
+    logger.info("="*80)
+    logger.info("CLIPER started")
+    logger.info("="*80)
 
     # Inicializo componentes
     console.print("[cyan]Initializing CLIPER...[/cyan]\n")
@@ -1590,6 +2491,8 @@ def main():
     try:
         downloader = YoutubeDownloader()
         state_manager = get_state_manager()
+        logger.info("System initialized successfully")
+        logger.info("Downloader ready")
         console.print("[green]✓ System ready[/green]\n")
     except Exception as e:
         console.print(Panel(
@@ -1621,7 +2524,7 @@ def main():
             if opcion == "1":
                 opcion_procesar_video(videos, state_manager)
             elif opcion == "2":
-                opcion_descargar_video(downloader, state_manager)
+                opcion_agregar_video(downloader, state_manager)
                 videos = escanear_videos()  # Reescaneo
             elif opcion == "3":
                 opcion_cleanup_project()
@@ -1633,7 +2536,7 @@ def main():
                 break
         else:
             if opcion == "1":
-                opcion_descargar_video(downloader, state_manager)
+                opcion_agregar_video(downloader, state_manager)
                 videos = escanear_videos()  # Reescaneo
             elif opcion == "2":
                 opcion_cleanup_project()

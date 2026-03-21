@@ -7,6 +7,7 @@ Los subtítulos pueden quemarse en el video (hard-coded) o agregarse como pista 
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from rich.console import Console
@@ -170,6 +171,176 @@ class SubtitleGenerator:
         except Exception as e:
             self.logger.error(f"Error generando subtítulos del clip: {e}")
             return None
+
+
+    def extract_opening_words_from_clip(
+        self,
+        transcript: Dict,
+        clip_start: float,
+        clip_end: float,
+        opening_duration: float = 10.0
+    ) -> Dict[str, any]:
+        """
+        Extract speaker's opening words from a clip (first 5-10 seconds).
+
+        This method extracts the exact words the speaker says at the beginning of a clip.
+        Used for viral copy generation - starting with speaker's own words creates
+        authenticity and improves engagement.
+
+        Args:
+            transcript: WhisperX transcript dict with word-level timestamps
+            clip_start: Clip start time in seconds (e.g., 15.0)
+            clip_end: Clip end time in seconds (e.g., 80.0)
+            opening_duration: How many seconds to extract from clip start (default 10)
+
+        Returns:
+            Dict with keys:
+            - opening_words: str (e.g., "La IA es revolucionaria")
+            - opening_duration_actual: float (actual seconds captured)
+            - word_count: int (number of words extracted)
+            - timestamp_range: tuple (start, end) of extracted words
+            - success: bool (whether extraction succeeded)
+
+        Example:
+            >>> result = subtitle_gen.extract_opening_words_from_clip(
+            ...     transcript=clip["transcript"],
+            ...     clip_start=15.0,
+            ...     clip_end=80.0,
+            ...     opening_duration=10.0
+            ... )
+            >>> print(result)
+            {
+                'opening_words': 'La IA es revolucionaria',
+                'opening_duration_actual': 2.34,
+                'word_count': 4,
+                'timestamp_range': (15.0, 17.34),
+                'success': True
+            }
+        """
+        try:
+            segments = transcript.get("segments", [])
+
+            if not segments:
+                self.logger.warning(f"No segments found in transcript")
+                return {
+                    "opening_words": "",
+                    "opening_duration_actual": 0.0,
+                    "word_count": 0,
+                    "timestamp_range": (clip_start, clip_start),
+                    "success": False
+                }
+
+            # Define time window for opening words
+            opening_end = clip_start + opening_duration
+
+            # Collect words within the opening window
+            opening_words_list = []
+            actual_start_time = None
+            actual_end_time = None
+
+            for segment in segments:
+                words = segment.get("words", [])
+
+                for word_obj in words:
+                    word_text = word_obj.get("word", "").strip()
+                    word_start = word_obj.get("start", 0)
+                    word_end = word_obj.get("end", 0)
+
+                    # Check if word falls within opening window
+                    if word_start >= clip_start and word_start < opening_end:
+                        opening_words_list.append(word_text)
+
+                        # Track actual start/end times
+                        if actual_start_time is None:
+                            actual_start_time = word_start
+                        actual_end_time = word_end
+
+            # Build result
+            opening_words = " ".join(opening_words_list)
+            actual_duration = (actual_end_time - actual_start_time) if actual_start_time else 0.0
+
+            if opening_words:
+                self.logger.info(
+                    f"Extracted opening words ({len(opening_words_list)} words, "
+                    f"{actual_duration:.2f}sec): '{opening_words}'"
+                )
+                return {
+                    "opening_words": opening_words,
+                    "opening_duration_actual": actual_duration,
+                    "word_count": len(opening_words_list),
+                    "timestamp_range": (actual_start_time, actual_end_time),
+                    "success": True
+                }
+            else:
+                self.logger.warning(
+                    f"No words found in opening window ({clip_start}-{opening_end})"
+                )
+                return {
+                    "opening_words": "",
+                    "opening_duration_actual": 0.0,
+                    "word_count": 0,
+                    "timestamp_range": (clip_start, clip_start),
+                    "success": False
+                }
+
+        except Exception as e:
+            self.logger.error(f"Error extracting opening words: {e}")
+            return {
+                "opening_words": "",
+                "opening_duration_actual": 0.0,
+                "word_count": 0,
+                "timestamp_range": (clip_start, clip_start),
+                "success": False
+            }
+
+
+    def extract_speaker_hashtags(self, clip_text: str) -> List[str]:
+        """
+        Extract hashtags speaker mentioned in clip.
+
+        Scans the clip text for hashtags (pattern: #\w+) and returns unique ones.
+        Used to preserve speaker's actual hashtags in generated copies rather than
+        inventing new ones.
+
+        Args:
+            clip_text: Full text of the clip (can be reconstructed from segments)
+
+        Returns:
+            List of hashtags found (e.g., ["#AICDMX", "#Future"])
+            Empty list if no hashtags found
+
+        Example:
+            >>> text = "La IA es revolucionaria #AICDMX #Future #Tech"
+            >>> hashtags = subtitle_gen.extract_speaker_hashtags(text)
+            >>> print(hashtags)
+            ['#AICDMX', '#Future', '#Tech']
+        """
+        try:
+            if not clip_text:
+                return []
+
+            # Pattern: # followed by one or more word characters
+            pattern = r'#\w+'
+
+            # Find all matches
+            matches = re.findall(pattern, clip_text)
+
+            # Deduplicate while preserving order
+            seen = set()
+            unique_hashtags = []
+            for hashtag in matches:
+                if hashtag not in seen:
+                    seen.add(hashtag)
+                    unique_hashtags.append(hashtag)
+
+            if unique_hashtags:
+                self.logger.info(f"Extracted hashtags: {unique_hashtags}")
+
+            return unique_hashtags
+
+        except Exception as e:
+            self.logger.error(f"Error extracting hashtags: {e}")
+            return []
 
 
     def _create_srt_entries(

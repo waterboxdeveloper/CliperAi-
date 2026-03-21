@@ -44,6 +44,7 @@ from src.models.copy_schemas import (
 )
 from src.prompts import get_prompt_for_style
 from src.prompts.classifier_prompt import get_classifier_prompt
+from src.subtitle_generator import SubtitleGenerator
 
 
 # ============================================================================
@@ -164,6 +165,7 @@ class CopysGenerator:
         workflow.add_node("load_data", self.load_data_node)
         workflow.add_node("classify_clips", self.classify_clips_node)
         workflow.add_node("group_by_style", self.group_by_style_node)
+        workflow.add_node("extract_opening_words", self.extract_opening_words_node)
         workflow.add_node("generate_viral", self.generate_viral_node)
         workflow.add_node("generate_educational", self.generate_educational_node)
         workflow.add_node("generate_storytelling", self.generate_storytelling_node)
@@ -176,7 +178,8 @@ class CopysGenerator:
         workflow.set_entry_point("load_data")
         workflow.add_edge("load_data", "classify_clips")
         workflow.add_edge("classify_clips", "group_by_style")
-        workflow.add_edge("group_by_style", "generate_viral")
+        workflow.add_edge("group_by_style", "extract_opening_words")
+        workflow.add_edge("extract_opening_words", "generate_viral")
         workflow.add_edge("generate_viral", "generate_educational")
         workflow.add_edge("generate_educational", "generate_storytelling")
         workflow.add_edge("generate_storytelling", "merge_results")
@@ -474,6 +477,110 @@ Responde SOLO con JSON válido (sin markdown):"""
 
 
     # ========================================================================
+    # NODO 3.5: EXTRACT OPENING WORDS (NUEVO - enriquece clips con metadata)
+    # ========================================================================
+
+    def extract_opening_words_node(self, state: CopysGeneratorState) -> Dict:
+        """
+        Extrae opening_words, speaker_hashtags, y language de cada clip.
+
+        ¿Por qué este nodo?
+        - Enriquece clips con datos necesarios para generación
+        - Detecta language para seleccionar prompt bilingüe correcto
+        - Extrae opening_words para forzar autenticidad en copies
+        - Extrae speaker_hashtags para preservar hashtags reales
+
+        Flujo:
+        1. Para cada clip en grouped_clips
+        2. Extrae: opening_words, speaker_hashtags, language
+        3. Agrega estos datos al clip
+        4. Retorna grouped_clips actualizado
+
+        Returns:
+            Dict con grouped_clips enriquecido
+        """
+        try:
+            grouped_clips = state.get('grouped_clips', {})
+            subtitle_gen = SubtitleGenerator()
+
+            # Procesar cada grupo de clips
+            for style in ['viral', 'educational', 'storytelling']:
+                clips = grouped_clips.get(style, [])
+
+                for clip in clips:
+                    # Obtener transcript del clip
+                    # El transcript puede venir en diferentes formatos:
+                    # 1. Directamente: clip['transcript'] (string)
+                    # 2. Como objeto: clip['transcript'] (dict con segments)
+                    # 3. Como JSON: puede ser que venga serializado
+
+                    transcript_data = clip.get('transcript')
+
+                    # Si transcript es string (transcripción simple), intentar parsearlo
+                    if isinstance(transcript_data, str):
+                        try:
+                            # Podría ser JSON serializado
+                            import json as json_module
+                            transcript_obj = json_module.loads(transcript_data)
+                        except (json_module.JSONDecodeError, TypeError):
+                            # Si no es JSON, crear un objeto transcript simple
+                            transcript_obj = {
+                                "segments": [],
+                                "language": "es",  # Default Spanish
+                                "text": transcript_data
+                            }
+                    else:
+                        # Ya es dict
+                        transcript_obj = transcript_data if isinstance(transcript_data, dict) else {}
+
+                    # Extraer language (del transcript o default)
+                    language = transcript_obj.get('language', 'es').lower()
+                    clip['language'] = language
+
+                    # Extraer opening_words (primeros 5-10 segundos)
+                    clip_start = clip.get('start_time', 0)
+                    clip_end = clip.get('end_time', clip.get('duration', 0))
+
+                    opening_result = subtitle_gen.extract_opening_words_from_clip(
+                        transcript=transcript_obj,
+                        clip_start=clip_start,
+                        clip_end=clip_end,
+                        opening_duration=10.0
+                    )
+
+                    clip['opening_words'] = opening_result.get('opening_words', '')
+                    clip['opening_duration_actual'] = opening_result.get('opening_duration_actual', 0)
+
+                    # Extraer speaker_hashtags
+                    # Reconstruir texto del clip si es necesario
+                    clip_text = transcript_obj.get('text', '')
+                    if not clip_text and 'segments' in transcript_obj:
+                        # Reconstruir desde segments
+                        clip_text = ' '.join([
+                            seg.get('text', '') for seg in transcript_obj.get('segments', [])
+                        ])
+
+                    speaker_hashtags = subtitle_gen.extract_speaker_hashtags(clip_text)
+                    clip['speaker_hashtags_provided'] = speaker_hashtags
+
+            return {
+                "grouped_clips": grouped_clips,
+                "logs": [f"✅ Extraídos opening_words, hashtags, y language de todos los clips"]
+            }
+
+        except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            return {
+                "error_message": f"Error extrayendo opening words: {e}",
+                "logs": [
+                    f"❌ Error en extraction: {e}",
+                    f"📋 Traceback: {error_detail[:500]}"
+                ]
+            }
+
+
+    # ========================================================================
     # NODOS 4-6: GENERATE (x3, uno por estilo)
     # ========================================================================
 
@@ -500,8 +607,12 @@ Responde SOLO con JSON válido (sin markdown):"""
         if not clips:
             return []
 
-        # Construir prompt una sola vez
-        full_prompt = get_prompt_for_style(style)
+        # Detectar language dominante del batch
+        # (asumimos que clips en mismo batch tienen mismo idioma)
+        language = clips[0].get('language', 'es') if clips else 'es'
+
+        # Construir prompt con language-awareness
+        full_prompt = get_prompt_for_style(style, language=language)
 
         # Procesar en batches de 5 clips para evitar timeouts
         BATCH_SIZE = 5
@@ -513,11 +624,21 @@ Responde SOLO con JSON válido (sin markdown):"""
             # Preparar clips del batch para el prompt
             clips_input = []
             for clip in batch:
-                clips_input.append({
+                clip_input = {
                     "clip_id": clip['clip_id'],
                     "transcript": clip['transcript'],
                     "duration": clip['duration']
-                })
+                }
+
+                # Agregar opening_words si existen (crucial para autenticidad)
+                if clip.get('opening_words'):
+                    clip_input['opening_words'] = clip['opening_words']
+
+                # Agregar speaker_hashtags si existen
+                if clip.get('speaker_hashtags_provided'):
+                    clip_input['speaker_hashtags'] = clip['speaker_hashtags_provided']
+
+                clips_input.append(clip_input)
 
             # User message para este batch
             user_message = f"""Genera copies para estos {len(clips_input)} clips en estilo {style}:

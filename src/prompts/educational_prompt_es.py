@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Educational Style Prompt
+Educational Style Prompt - Spanish (ES)
 
-Este módulo contiene el prompt específico para estilo EDUCATIONAL.
+Este módulo contiene el prompt específico para estilo EDUCATIONAL en español.
 
 ¿Por qué este archivo separado?
 - Educational tiene objetivos diferentes a viral
 - Prioriza claridad y valor educativo sobre shock value
 - Se combina con base_prompts.py para crear el prompt completo
+- NUEVO: Comienza CON las palabras exactas del hablante
 
 Características del estilo educational:
 - Hooks basados en aprendizaje
@@ -16,32 +17,40 @@ Características del estilo educational:
 - Enfoque en utilidad y takeaways
 """
 
-EDUCATIONAL_STYLE_PROMPT = """
+EDUCATIONAL_STYLE_PROMPT_ES = """
 ## ESTILO: EDUCATIONAL 📚
 
 Tu objetivo es crear copies que prometan VALOR EDUCATIVO claro y específico.
 
+===== CRÍTICO: PALABRAS DE APERTURA =====
+El copy DEBE comenzar con estas palabras exactas dichas por el hablante:
+"{opening_words}"
+
+NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
+
+===== FÓRMULA: [PALABRAS_APERTURA] + [TU_HOOK] =====
+
 ### Fórmulas que funcionan:
 
 1. **Hook de aprendizaje directo:**
-   - "3 formas de optimizar React hooks que no conocías #AICDMX"
-   - "Cómo debuggear memory leaks en 5 minutos #AICDMX"
-   - "La diferencia entre async/await y Promises explicada simple #AICDMX"
+   - "[Opening words] 3 formas de optimizar React hooks que no conocías #AICDMX"
+   - "[Opening words] Cómo debuggear memory leaks en 5 minutos #AICDMX"
+   - "[Opening words] La diferencia entre async/await y Promises explicada simple #AICDMX"
 
 2. **Hook de problema → solución:**
-   - "¿Tu API es lenta? Esta técnica redujo latencia en 80% #AICDMX"
-   - "Cómo evité 3 horas de debugging con esta regla #AICDMX"
-   - "El error de TypeScript que todos cometemos (y cómo arreglarlo) #AICDMX"
+   - "[Opening words] ¿Tu API es lenta? Esta técnica redujo latencia en 80% #AICDMX"
+   - "[Opening words] Cómo evité 3 horas de debugging con esta regla #AICDMX"
+   - "[Opening words] El error de TypeScript que todos cometemos (y cómo arreglarlo) #AICDMX"
 
 3. **Hook de lista o framework:**
-   - "5 patrones de diseño que todo senior debe conocer #AICDMX"
-   - "La checklist de code review que uso en producción #AICDMX"
-   - "4 principios de clean code con ejemplos reales #AICDMX"
+   - "[Opening words] 5 patrones de diseño que todo senior debe conocer #AICDMX"
+   - "[Opening words] La checklist de code review que uso en producción #AICDMX"
+   - "[Opening words] 4 principios de clean code con ejemplos reales #AICDMX"
 
 4. **Hook de "aprende lo que yo aprendí":**
-   - "Lo que aprendí después de 100 entrevistas técnicas #AICDMX"
-   - "Migré 1M de usuarios a microservicios: esto NO funcionó #AICDMX"
-   - "Lessons learned: 2 años como tech lead #AICDMX"
+   - "[Opening words] Lo que aprendí después de 100 entrevistas técnicas #AICDMX"
+   - "[Opening words] Migré 1M de usuarios a microservicios: esto NO funcionó #AICDMX"
+   - "[Opening words] Lessons learned: 2 años como tech lead #AICDMX"
 
 ### Características del estilo educational:
 
@@ -135,16 +144,11 @@ Si un clip es puro entertainment sin valor educativo, dale engagement_score bajo
 """
 
 
-def get_educational_prompt() -> str:
+def get_educational_prompt_es() -> str:
     """
-    Retorna el prompt de estilo educational.
-
-    ¿Por qué esta función?
-    - Mantiene consistencia con otros módulos de prompts
-    - Facilita importación y testing
-    - Permite modificar el prompt sin cambiar la interfaz
+    Retorna el prompt de estilo educational en español.
 
     Returns:
-        String con el prompt de estilo educational
+        String con el prompt de estilo educational (español)
     """
-    return EDUCATIONAL_STYLE_PROMPT
+    return EDUCATIONAL_STYLE_PROMPT_ES

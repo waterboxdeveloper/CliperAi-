@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-Storytelling Style Prompt
+Storytelling Style Prompt - Spanish (ES)
 
-Este módulo contiene el prompt específico para estilo STORYTELLING.
+Este módulo contiene el prompt específico para estilo STORYTELLING en español.
 
 ¿Por qué este archivo separado?
 - Storytelling usa estructura narrativa (inicio, desarrollo, conclusión)
 - Prioriza conexión emocional y journey personal
 - Se combina con base_prompts.py para crear el prompt completo
+- NUEVO: Comienza CON las palabras exactas del hablante
 
 Características del estilo storytelling:
 - Hooks que inician una historia
@@ -16,32 +17,40 @@ Características del estilo storytelling:
 - Relatability a través de experiencias personales
 """
 
-STORYTELLING_STYLE_PROMPT = """
+STORYTELLING_STYLE_PROMPT_ES = """
 ## ESTILO: STORYTELLING 📖
 
 Tu objetivo es crear copies que INICIEN UNA HISTORIA que la audiencia quiera seguir.
 
+===== CRÍTICO: PALABRAS DE APERTURA =====
+El copy DEBE comenzar con estas palabras exactas dichas por el hablante:
+"{opening_words}"
+
+NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
+
+===== FÓRMULA: [PALABRAS_APERTURA] + [TU_HOOK] =====
+
 ### Fórmulas que funcionan:
 
 1. **Hook de "antes vs después":**
-   - "Hace 2 años no sabía programar. Hoy trabajo en Google 🚀 #AICDMX"
-   - "Mi primer deploy en producción rompió todo. Esto aprendí #AICDMX"
-   - "De bootcamp a $150k/año: el camino que nadie te cuenta #AICDMX"
+   - "[Opening words] Hace 2 años no sabía programar. Hoy trabajo en Google 🚀 #AICDMX"
+   - "[Opening words] Mi primer deploy en producción rompió todo. Esto aprendí #AICDMX"
+   - "[Opening words] De bootcamp a $150k/año: el camino que nadie te cuenta #AICDMX"
 
 2. **Hook de momento crucial:**
-   - "El día que mi CTO me dijo: 'Tu código es un desastre' #AICDMX"
-   - "5 minutos antes de la demo, el servidor se cayó... #AICDMX"
-   - "Renuncié a mi trabajo sin tener otro. Esto pasó después #AICDMX"
+   - "[Opening words] El día que mi CTO me dijo: 'Tu código es un desastre' #AICDMX"
+   - "[Opening words] 5 minutos antes de la demo, el servidor se cayó... #AICDMX"
+   - "[Opening words] Renuncié a mi trabajo sin tener otro. Esto pasó después #AICDMX"
 
 3. **Hook de journey personal:**
-   - "200 rechazos después, esto es lo que cambió #AICDMX"
-   - "Cómo pasé de tutorials hell a mi primer freelance #AICDMX"
-   - "La pregunta de entrevista que me hizo dudar de todo #AICDMX"
+   - "[Opening words] 200 rechazos después, esto es lo que cambió #AICDMX"
+   - "[Opening words] Cómo pasé de tutorials hell a mi primer freelance #AICDMX"
+   - "[Opening words] La pregunta de entrevista que me hizo dudar de todo #AICDMX"
 
 4. **Hook de lección aprendida:**
-   - "Perdí 3 meses en un proyecto que nadie usó. Lección cara #AICDMX"
-   - "Mi mentor me dijo algo que cambió mi carrera en tech #AICDMX"
-   - "El error de junior que cometí como senior (y cómo lo arreglé) #AICDMX"
+   - "[Opening words] Perdí 3 meses en un proyecto que nadie usó. Lección cara #AICDMX"
+   - "[Opening words] Mi mentor me dijo algo que cambió mi carrera en tech #AICDMX"
+   - "[Opening words] El error de junior que cometí como senior (y cómo lo arreglé) #AICDMX"
 
 ### Características del estilo storytelling:
 
@@ -153,16 +162,11 @@ Si un clip es puramente técnico sin historia personal, dale engagement_score mo
 """
 
 
-def get_storytelling_prompt() -> str:
+def get_storytelling_prompt_es() -> str:
     """
-    Retorna el prompt de estilo storytelling.
-
-    ¿Por qué esta función?
-    - Mantiene consistencia con otros módulos de prompts
-    - Facilita importación desde copys_generator.py
-    - Permite testing y modificaciones sin romper imports
+    Retorna el prompt de estilo storytelling en español.
 
     Returns:
-        String con el prompt de estilo storytelling
+        String con el prompt de estilo storytelling (español)
     """
-    return STORYTELLING_STYLE_PROMPT
+    return STORYTELLING_STYLE_PROMPT_ES

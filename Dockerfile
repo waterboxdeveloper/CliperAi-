@@ -14,8 +14,14 @@ RUN apt-get update && \
     libmagic1 \
     git \
     libgl1-mesa-glx \
-    libglib2.0-0 && \
+    libglib2.0-0 \
+    curl \
+    unzip && \
     rm -rf /var/lib/apt/lists/*
+
+# Install Deno for yt-dlp JavaScript runtime (required for YouTube support)
+RUN curl -fsSL https://deno.land/x/install/install.sh | sh && \
+    mv ~/.deno/bin/deno /usr/local/bin/
 
 # Copy pyproject.toml first
 COPY pyproject.toml ./

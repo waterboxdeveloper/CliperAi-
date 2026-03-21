@@ -313,6 +313,43 @@ class CleanupManager:
         # Persistir cambios
         self.state_manager._save_state()
 
+    def delete_all_except_downloads_and_transcripts(self, dry_run: bool = False) -> Dict[str, bool]:
+        """
+        Limpia TODO excepto descargas y transcripts (modo re-procesamiento)
+
+        DECISIÓN: Útil para cambiar prompts/modelos sin re-descargar
+        - Mantiene: videos descargados, transcripts
+        - Borra: clips metadata, outputs, logs viejos, caché
+
+        Args:
+            dry_run: Si True, solo simula
+
+        Returns:
+            Dict con resultados: {'clips_metadata': True, 'output': True, 'cache': True, ...}
+        """
+        state = self.state_manager.get_all_videos()
+        results = {}
+
+        # 1. Eliminar clips metadata y outputs de TODOS los videos
+        for video_key in state.keys():
+            del_results = self.delete_video_artifacts(
+                video_key,
+                ['clips_metadata', 'output'],
+                dry_run=dry_run
+            )
+            results[f"{video_key}_clips_meta"] = del_results.get('clips_metadata', False)
+            results[f"{video_key}_output"] = del_results.get('output', False)
+
+        # 2. Limpiar caché y residuales
+        if not dry_run:
+            cache_cleaned = self._clean_cache_and_residuals()
+            results['cache'] = cache_cleaned
+        else:
+            logger.info("[DRY RUN] Would clean cache and residual files")
+            results['cache'] = True
+
+        return results
+
     def delete_all_project_data(self, dry_run: bool = False) -> Dict[str, bool]:
         """
         Elimina TODOS los artifacts del proyecto (fresh start)
@@ -405,13 +442,16 @@ class CleanupManager:
         - Archivos lock (.lock)
         - Archivos temporales en /tmp
         - Copys sin SRT (huérfanos)
-        - Logs antiguos
+        - Logs antiguos (> 7 días)
         - Temporales de video_exporter (temp_*.mp4, temp_reframed_*.mp4)
 
         Returns:
             bool: True si limpió exitosamente
         """
         try:
+            from datetime import datetime, timedelta
+            import time
+
             cleaned_count = 0
             cleaned_size = 0
 
@@ -484,6 +524,23 @@ class CleanupManager:
                 except Exception as e:
                     logger.warning(f"Could not remove .DS_Store: {e}")
 
+            # 6. Limpiar logs viejos (> 7 días)
+            # ESPECÍFICO: Solo en logs/ para evitar acumulación indefinida
+            logs_dir = self.downloads_dir.parent / 'logs'
+            if logs_dir.exists():
+                cutoff_time = time.time() - (7 * 24 * 60 * 60)  # 7 días atrás
+                for log_file in logs_dir.glob('cliper_*.log'):
+                    try:
+                        file_mtime = log_file.stat().st_mtime
+                        if file_mtime < cutoff_time:
+                            size = log_file.stat().st_size
+                            log_file.unlink()
+                            cleaned_count += 1
+                            cleaned_size += size
+                            logger.debug(f"Removed old log file: {log_file.name}")
+                    except Exception as e:
+                        logger.warning(f"Could not remove log file {log_file}: {e}")
+
             cleaned_size_mb = cleaned_size / 1024 / 1024
             if cleaned_count > 0:
                 logger.info(f"Cleaned {cleaned_count} cache/residual files ({cleaned_size_mb:.2f} MB)")
@@ -495,6 +552,75 @@ class CleanupManager:
         except Exception as e:
             logger.error(f"Error cleaning cache and residuals: {e}")
             return False
+
+    def get_total_sizes(self) -> Dict[str, int]:
+        """
+        Calcula tamaños totales para resumen visual
+
+        Returns:
+            Dict con totales: {
+                'total_downloads': int,
+                'total_transcripts': int,
+                'total_clips_metadata': int,
+                'total_output': int,
+                'total_all': int
+            }
+        """
+        state = self.state_manager.get_all_videos()
+        totals = {
+            'total_downloads': 0,
+            'total_transcripts': 0,
+            'total_clips_metadata': 0,
+            'total_output': 0,
+        }
+
+        for video_key in state.keys():
+            artifacts = self.get_video_artifacts(video_key)
+            totals['total_downloads'] += artifacts.get('download', {}).get('size', 0)
+            totals['total_transcripts'] += artifacts.get('transcript', {}).get('size', 0)
+            totals['total_clips_metadata'] += artifacts.get('clips_metadata', {}).get('size', 0)
+            totals['total_output'] += artifacts.get('output', {}).get('size', 0)
+
+        totals['total_all'] = (
+            totals['total_downloads'] +
+            totals['total_transcripts'] +
+            totals['total_clips_metadata'] +
+            totals['total_output']
+        )
+
+        return totals
+
+    def display_space_summary(self):
+        """
+        Muestra resumen visual de espacio usado y liberables
+
+        DECISIÓN: UX clara - mostrar qué "se come espacio"
+        """
+        totals = self.get_total_sizes()
+
+        def format_size(size_bytes):
+            if size_bytes == 0:
+                return "0 MB"
+            mb = size_bytes / 1024 / 1024
+            if mb < 0.1:
+                return f"{size_bytes / 1024:.1f} KB"
+            return f"{mb:.1f} MB"
+
+        self.console.print("\n[bold]📊 Uso de Espacio del Proyecto:[/bold]\n")
+
+        # Tabla visual
+        space_table = Table(show_header=False, box=None, padding=(0, 2))
+        space_table.add_column(style="cyan")
+        space_table.add_column(style="white", justify="right")
+
+        space_table.add_row("💾 Videos descargados", format_size(totals['total_downloads']))
+        space_table.add_row("📝 Transcripciones", format_size(totals['total_transcripts']))
+        space_table.add_row("📋 Metadata clips", format_size(totals['total_clips_metadata']))
+        space_table.add_row("🎬 Clips exportados", format_size(totals['total_output']))
+        space_table.add_row("[bold]─────────────────────[/bold]", "[bold]─────────────[/bold]")
+        space_table.add_row("[bold]Total[/bold]", f"[bold]{format_size(totals['total_all'])}[/bold]")
+
+        self.console.print(space_table)
 
     def display_cleanable_artifacts(self, video_key: Optional[str] = None):
         """
@@ -519,11 +645,11 @@ class CleanupManager:
             self.console.print("[yellow]No videos found in project[/yellow]")
             return
 
-        table = Table(title="Cleanable Artifacts")
+        table = Table(title="Artifacts Limpiables por Video")
         table.add_column("Video", style="cyan", no_wrap=False)
-        table.add_column("Download", justify="right")
-        table.add_column("Transcript", justify="right")
-        table.add_column("Clips Meta", justify="right")
+        table.add_column("Descarga", justify="right")
+        table.add_column("Transcripción", justify="right")
+        table.add_column("Meta Clips", justify="right")
         table.add_column("Output", justify="right")
         table.add_column("Total", justify="right", style="bold")
 

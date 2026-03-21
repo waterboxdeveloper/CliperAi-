@@ -12,7 +12,8 @@ from typing import Optional
 def setup_logger(
     name: str = "cliper",
     level: int = logging.INFO,
-    log_file: Optional[str] = None
+    log_file: Optional[str] = None,
+    console_output: bool = True
 ) -> logging.Logger:
     """
     Configura y retorna un logger con formato personalizado.
@@ -21,6 +22,7 @@ def setup_logger(
         name: Nombre del logger
         level: Nivel de logging (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_file: Ruta opcional para guardar logs en archivo
+        console_output: Si False, solo guarda a archivo sin mostrar en consola
 
     Returns:
         Logger configurado
@@ -39,11 +41,12 @@ def setup_logger(
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # Handler para consola
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(level)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    # Handler para consola (opcional)
+    if console_output:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(level)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
 
     # Handler para archivo (opcional)
     if log_file:
