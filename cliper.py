@@ -1651,49 +1651,77 @@ def opcion_exportar_clips(video: Dict, state_manager):
     # --- Branding (Logo Only) ---
     console.print()
     add_logo = Confirm.ask("[cyan]Add logo overlay to clips?[/cyan]", default=False)
-    
+
     logo_path = "assets/logo.png"
-    logo_position = "top-right"
-    logo_scale = 0.1
+    logo_position = "top-left"  # Changed default from top-right to top-left
+    logo_scale = 0.07  # Changed default from 0.1 to 0.07 (medium)
 
     if add_logo:
         console.print(f"[green]✓[/green] Logo overlay enabled.")
-        
+
         advanced_branding = Confirm.ask(
-            "\n[dim]Configure advanced logo settings (path, position, scale)?[/dim]",
+            "\n[dim]Configure logo position & size?[/dim]",
             default=False
         )
         if advanced_branding:
             logo_path = Prompt.ask("Path to logo file", default=logo_path)
 
-            console.print("\n[bold]Logo Position:[/bold]")
-            console.print("  [cyan]1.[/cyan] top-right (default)")
-            console.print("  [cyan]2.[/cyan] top-left")
-            console.print("  [cyan]3.[/cyan] bottom-right")
-            console.print("  [cyan]4.[/cyan] bottom-left")
-            console.print("  [cyan]5.[/cyan] Volver al menú anterior")
+            console.print("\n[bold]Logo Position:[/bold]\n")
+            position_table = Table(show_header=False, box=None, padding=(0, 2))
+            position_table.add_column(style="cyan")
+            position_table.add_column(style="white")
+            position_table.add_column(style="dim")
+
+            position_table.add_row("1", "Top Left (default)", "Adjusted for TikTok")
+            position_table.add_row("2", "Top Right", "Classic corner")
+            position_table.add_row("3", "Bottom Left", "Footer position")
+            position_table.add_row("4", "Bottom Right", "Footer corner")
+            position_table.add_row("5", "Volver al menú anterior", "")
+
+            console.print(position_table)
+            console.print()
 
             position_choice = Prompt.ask(
-                "\n[cyan]Choice[/cyan]",
+                "[cyan]Logo position[/cyan]",
                 choices=["1", "2", "3", "4", "5"],
                 default="1"
             )
 
             if position_choice == "5":
-                logo_position = "top-right"  # Reset to default if cancelled
+                logo_position = "top-left"  # Reset to default if cancelled
             else:
                 position_map = {
-                    "1": "top-right",
-                    "2": "top-left",
-                    "3": "bottom-right",
-                    "4": "bottom-left"
+                    "1": "top-left",
+                    "2": "top-right",
+                    "3": "bottom-left",
+                    "4": "bottom-right"
                 }
                 logo_position = position_map[position_choice]
-            logo_scale_str = Prompt.ask("Logo scale (e.g., 0.1 for 10% of height)", default=str(logo_scale))
-            try:
-                logo_scale = float(logo_scale_str)
-            except ValueError:
-                console.print(f"[yellow]Invalid scale, using default: {logo_scale}[/yellow]")
+
+            # Logo size selection (predefined options)
+            console.print("\n[bold]Logo Size:[/bold]\n")
+            size_table = Table(show_header=False, box=None, padding=(0, 2))
+            size_table.add_column(style="cyan")
+            size_table.add_column(style="white")
+            size_table.add_column(style="dim")
+
+            size_table.add_row("1", "Medium", "7% of frame height (default)")
+            size_table.add_row("2", "Large", "10% of frame height")
+
+            console.print(size_table)
+            console.print()
+
+            size_choice = Prompt.ask(
+                "[cyan]Logo size[/cyan]",
+                choices=["1", "2"],
+                default="1"
+            )
+
+            size_map = {
+                "1": 0.07,
+                "2": 0.10
+            }
+            logo_scale = size_map[size_choice]
 
     # Pregunto si quiere subtítulos
     console.print()
@@ -1942,11 +1970,19 @@ def opcion_exportar_clips(video: Dict, state_manager):
 
             add_logo = Confirm.ask("[cyan]Add logo overlay?[/cyan]", default=add_logo)
 
-            if add_logo and logo_position == "top-right":
-                console.print("\n  [cyan]1.[/cyan] top-right")
-                console.print("  [cyan]2.[/cyan] top-left")
-                console.print("  [cyan]3.[/cyan] bottom-right")
-                console.print("  [cyan]4.[/cyan] bottom-left\n")
+            if add_logo:
+                console.print("\n[bold]Logo Position:[/bold]\n")
+                logo_pos_table = Table(show_header=False, box=None, padding=(0, 2))
+                logo_pos_table.add_column(style="cyan")
+                logo_pos_table.add_column(style="white")
+
+                logo_pos_table.add_row("1", "Top Left (default, TikTok adjusted)")
+                logo_pos_table.add_row("2", "Top Right")
+                logo_pos_table.add_row("3", "Bottom Left")
+                logo_pos_table.add_row("4", "Bottom Right")
+
+                console.print(logo_pos_table)
+                console.print()
 
                 pos_choice = Prompt.ask(
                     "[cyan]Logo position[/cyan]",
@@ -1954,8 +1990,28 @@ def opcion_exportar_clips(video: Dict, state_manager):
                     default="1"
                 )
 
-                logo_map = {"1": "top-right", "2": "top-left", "3": "bottom-right", "4": "bottom-left"}
+                logo_map = {"1": "top-left", "2": "top-right", "3": "bottom-left", "4": "bottom-right"}
                 logo_position = logo_map[pos_choice]
+
+                console.print("\n[bold]Logo Size:[/bold]\n")
+                logo_size_table = Table(show_header=False, box=None, padding=(0, 2))
+                logo_size_table.add_column(style="cyan")
+                logo_size_table.add_column(style="white")
+
+                logo_size_table.add_row("1", "Medium (7%)")
+                logo_size_table.add_row("2", "Large (10%)")
+
+                console.print(logo_size_table)
+                console.print()
+
+                size_choice = Prompt.ask(
+                    "[cyan]Logo size[/cyan]",
+                    choices=["1", "2"],
+                    default="1"
+                )
+
+                logo_scale_map = {"1": 0.07, "2": 0.10}
+                logo_scale = logo_scale_map[size_choice]
 
         elif (edit_choice == "3" and aspect_ratio != "9:16") or (edit_choice == "4" and aspect_ratio == "9:16"):
             # Editar subtítulos

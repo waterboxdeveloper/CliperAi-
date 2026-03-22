@@ -200,13 +200,14 @@ class VideoExporter:
         
         subtitle_file = None
         if add_subtitles and transcript_path:
-            subtitle_filename = f"{clip_id}.srt"
+            subtitle_filename = f"{clip_id}.ass"  # Changed from .srt to .ass (Phase 3b)
             subtitle_file = output_dir / subtitle_filename
-            self.subtitle_generator.generate_srt_for_clip(
+            self.subtitle_generator.generate_ass_for_clip(
                 transcript_path=transcript_path,
                 clip_start=start_time,
                 clip_end=end_time,
-                output_path=str(subtitle_file)
+                output_path=str(subtitle_file),
+                subtitle_position=subtitle_style  # "bottom", "middle", or "very_high"
             )
 
         video_to_process = video_path
@@ -277,8 +278,15 @@ class VideoExporter:
                     filter_chains.append(f"{last_video_stream}{','.join(simple_filters)}[v_filtered]")
                     last_video_stream = "[v_filtered]"
                 
-                positions = {"top-right": "W-w-20:20", "top-left": "20:20", "bottom-right": "W-w-20:H-h-20", "bottom-left": "20:H-h-20"}
-                pos_str = positions.get(logo_position, positions["top-right"])
+                # Logo positioning (x:y offsets in pixels)
+                # top-left adjusted for TikTok: 20px left, 60px down to avoid status bar
+                positions = {
+                    "top-right": "W-w-20:20",
+                    "top-left": "20:60",  # Adjusted down for TikTok status bar
+                    "bottom-right": "W-w-20:H-h-20",
+                    "bottom-left": "20:H-h-20"
+                }
+                pos_str = positions.get(logo_position, positions["top-left"])
                 
                 # Chain the overlay
                 filter_chains.append(f"{last_video_stream}[{logo_input_idx}:v]overlay={pos_str}[v_out]")
@@ -388,75 +396,22 @@ class VideoExporter:
 
     def _get_subtitle_filter(self, subtitle_path: str, style: str = "bottom") -> str:
         """
-        Genero el filtro de ffmpeg para quemar subtítulos en el video
+        Generate ffmpeg filter for ASS subtitles (Phase 3b: ASS format).
+
+        With ASS files, all styling (font, color, position) is embedded in the file.
+        No need for force_style parameter like with SRT.
 
         Args:
-            subtitle_path: Ruta al archivo SRT (escapada para ffmpeg)
-            style: Posición de subtítulos ("bottom", "middle", "very_high") - todos 8px amarillo
+            subtitle_path: Path to .ass file (escaped for ffmpeg)
+            style: Subtitle position ("bottom", "middle", "very_high") - included for compatibility
+                   but styling is now in the ASS file itself
 
         Returns:
-            String de filtro para ffmpeg
+            Simple ffmpeg filter string
         """
-        # Estilos predefinidos para subtítulos (Phase 3: UX Critical)
-        # TODOS: 8px, AMARILLO (#FFFF00), sin shadow, sin outline
-        # 3 posiciones: bottom (default), middle, very_high
-        styles = {
-            "bottom": {
-                "FontName": "Arial",
-                "FontSize": "8",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "0",
-                "Shadow": "0",
-                "Bold": "0",
-                "Alignment": "2",  # Bottom-center
-                "MarginV": "20"
-            },
-            "middle": {
-                "FontName": "Arial",
-                "FontSize": "8",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "0",
-                "Shadow": "0",
-                "Bold": "0",
-                "Alignment": "5",  # Middle-center
-                "MarginV": "0"
-            },
-            "very_high": {
-                "FontName": "Arial",
-                "FontSize": "8",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "0",
-                "Shadow": "0",
-                "Bold": "0",
-                "Alignment": "8",  # Top-center
-                "MarginV": "10"
-            }
-        }
-
-        selected_style = styles.get(style, styles["bottom"])
-
-        # Construyo el filtro subtitles con el estilo
-        # subtitles filter quema los subtítulos directamente en el video
-        # Wrapeamos el path con comillas simples para manejar espacios
-        subtitle_filter = f"subtitles='{subtitle_path}':force_style='"
-        subtitle_filter += f"FontName={selected_style['FontName']},"
-        subtitle_filter += f"FontSize={selected_style['FontSize']},"
-        subtitle_filter += f"PrimaryColour={selected_style['PrimaryColour']},"
-        subtitle_filter += f"OutlineColour={selected_style['OutlineColour']},"
-        subtitle_filter += f"Outline={selected_style['Outline']},"
-        subtitle_filter += f"Shadow={selected_style['Shadow']},"
-        subtitle_filter += f"Bold={selected_style['Bold']}"
-
-        if "Alignment" in selected_style:
-            subtitle_filter += f",Alignment={selected_style['Alignment']}"
-
-        if "MarginV" in selected_style:
-            subtitle_filter += f",MarginV={selected_style['MarginV']}"
-
-        subtitle_filter += "'"
+        # With ASS format, styling info is in the file - no need for force_style
+        # FFmpeg will read positioning, colors, fonts directly from [V4+ Styles] section
+        subtitle_filter = f"subtitles='{subtitle_path}'"
 
         return subtitle_filter
 

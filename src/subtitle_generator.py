@@ -295,7 +295,7 @@ class SubtitleGenerator:
 
 
     def extract_speaker_hashtags(self, clip_text: str) -> List[str]:
-        """
+        r"""
         Extract hashtags speaker mentioned in clip.
 
         Scans the clip text for hashtags (pattern: #\w+) and returns unique ones.
@@ -535,3 +535,369 @@ class SubtitleGenerator:
             lines.append(' '.join(current_line))
 
         return lines if lines else [text]
+
+
+    # ==================== ASS FORMAT GENERATION (Phase 3b - Multicolor Support) ====================
+
+    def generate_ass_for_clip(
+        self,
+        transcript_path: str,
+        clip_start: float,
+        clip_end: float,
+        output_path: str,
+        subtitle_position: str = "bottom",
+        emphasis_keywords: Optional[List[str]] = None,
+        max_chars_per_line: int = 42,
+        max_duration: float = 5.0
+    ) -> Optional[str]:
+        """
+        Generate ASS (Advanced SubStation Alpha) subtitle file for a clip with multicolor support.
+
+        ASS format advantages:
+        - All styling metadata in one file (position, color, font)
+        - Support for per-word color override tags
+        - No need for ffmpeg -vf filter (cleaner)
+        - Professional subtitle format (anime/professional standard)
+
+        Args:
+            transcript_path: Path to WhisperX JSON transcript
+            clip_start: Clip start time in seconds
+            clip_end: Clip end time in seconds
+            output_path: Path to output .ass file
+            subtitle_position: "bottom" (default), "middle", or "very_high"
+            emphasis_keywords: Optional list of words to highlight in different color
+            max_chars_per_line: Max characters per subtitle line
+            max_duration: Max duration for a single subtitle
+
+        Returns:
+            Path to generated ASS file, or None if failed
+        """
+        try:
+            # Load transcript
+            with open(transcript_path, 'r', encoding='utf-8') as f:
+                transcript_data = json.load(f)
+
+            segments = transcript_data.get('segments', [])
+
+            # Filter segments for this clip
+            clip_segments = []
+            for segment in segments:
+                seg_start = segment.get('start', 0)
+                seg_end = segment.get('end', 0)
+
+                if seg_start < clip_end and seg_end > clip_start:
+                    adjusted_segment = segment.copy()
+
+                    # Adjust word timestamps if they exist
+                    if 'words' in segment:
+                        adjusted_words = []
+                        for word in segment['words']:
+                            word_start = word.get('start', 0)
+                            word_end = word.get('end', 0)
+
+                            if word_start >= clip_start and word_end <= clip_end:
+                                adjusted_word = word.copy()
+                                adjusted_word['start'] = word_start - clip_start
+                                adjusted_word['end'] = word_end - clip_start
+                                adjusted_words.append(adjusted_word)
+
+                        adjusted_segment['words'] = adjusted_words
+
+                    # Adjust segment timestamps
+                    adjusted_segment['start'] = max(0, seg_start - clip_start)
+                    adjusted_segment['end'] = min(clip_end - clip_start, seg_end - clip_start)
+                    clip_segments.append(adjusted_segment)
+
+            if not clip_segments:
+                self.logger.warning(f"No segments found for clip {clip_start}-{clip_end}")
+                return None
+
+            # Build ASS header with position and styling info
+            ass_header = self._build_ass_header(subtitle_position)
+
+            # Build ASS events with optional keyword highlighting
+            ass_events = self._build_ass_events(
+                clip_segments,
+                subtitle_position=subtitle_position,
+                emphasis_keywords=emphasis_keywords,
+                max_chars_per_line=max_chars_per_line,
+                max_duration=max_duration
+            )
+
+            # Write complete ASS file
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(ass_header)
+                f.write("\n[Events]\n")
+                f.write("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+                for event in ass_events:
+                    f.write(event)
+
+            self.logger.info(f"ASS subtitles generated: {output_path} (position: {subtitle_position})")
+            return str(output_path)
+
+        except Exception as e:
+            self.logger.error(f"Error generating ASS subtitles: {e}")
+            return None
+
+
+    def _build_ass_header(self, subtitle_position: str = "bottom") -> str:
+        """
+        Build ASS file header with V4+ Styles section.
+
+        Position mappings (ASS Alignment values use numpad layout):
+        - bottom (2): 20px from bottom
+        - middle (5): centered vertically
+        - very_high (8): 10px from top
+
+        All styles: 8px Arial, yellow color (#FFFF00), no outline/shadow
+        """
+        # TODO(human): Verify alignment values and margins are correct
+        # The alignment numbers come from ASS spec (numpad: 1-9)
+        # Test with actual video to ensure positioning matches expectations
+
+        styles_config = {
+            "bottom": {
+                "alignment": "2",
+                "margin_v": "20",
+                "desc": "Bottom-center (waist level)"
+            },
+            "middle": {
+                "alignment": "5",
+                "margin_v": "0",
+                "desc": "Middle-center (frame center)"
+            },
+            "very_high": {
+                "alignment": "8",
+                "margin_v": "10",
+                "desc": "Top-center (10px from top)"
+            }
+        }
+
+        config = styles_config.get(subtitle_position, styles_config["bottom"])
+
+        # ASS Header (v4.00+ format)
+        header = f"""[Script Info]
+Title: Clip Subtitles
+ScriptType: v4.00+
+Collisions: Normal
+PlayDepth: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: {subtitle_position},Arial,8,&H0000FFFF,&H80FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,{config['alignment']},0,0,{config['margin_v']},1
+"""
+        return header
+
+
+    def _build_ass_events(
+        self,
+        segments: List[Dict],
+        subtitle_position: str = "bottom",
+        emphasis_keywords: Optional[List[str]] = None,
+        max_chars_per_line: int = 42,
+        max_duration: float = 5.0
+    ) -> List[str]:
+        r"""
+        Build ASS event lines with word-level coloring support.
+
+        Converts subtitle lines to ASS format Dialogue entries with optional
+        per-word color highlighting using ASS override tags.
+
+        Example output:
+        Dialogue: 0,0:00:00.00,0:00:02.50,bottom,,0,0,0,,
+        Hola {\c&HFF00FF&}mundo{\c}, ¿cómo estás?
+        """
+        # TODO(human): Decide on color scheme for emphasis
+        # Currently: Yellow default, Magenta for keywords
+        # Could be configurable (red, cyan, green, etc.)
+        # Also consider if outline/shadow should be added for emphasis words
+
+        events = []
+        subtitle_index = 1
+
+        # Normalize keywords to lowercase for case-insensitive matching
+        keywords_lower = [kw.lower() for kw in (emphasis_keywords or [])]
+
+        for segment in segments:
+            if 'words' in segment and segment['words']:
+                words = segment['words']
+
+                # Group words into subtitle lines (same logic as SRT)
+                current_line_words = []
+                current_line_chars = 0
+                line_start_time = None
+
+                for word_obj in words:
+                    word_text = word_obj.get('word', '').strip()
+                    word_start = word_obj.get('start', 0)
+                    word_end = word_obj.get('end', 0)
+
+                    if not word_text:
+                        continue
+
+                    if line_start_time is None:
+                        line_start_time = word_start
+
+                    word_length = len(word_text) + 1
+
+                    # Check if we need to break to a new line
+                    if (current_line_chars + word_length > max_chars_per_line or
+                        (line_start_time and word_end - line_start_time > max_duration)):
+
+                        # Create ASS event with current line
+                        if current_line_words:
+                            line_text = self._apply_keyword_highlighting(
+                                current_line_words,
+                                keywords_lower
+                            )
+                            line_end_time = current_line_words[-1].get('end', word_start)
+
+                            event = self._format_ass_event(
+                                subtitle_index,
+                                line_start_time,
+                                line_end_time,
+                                subtitle_position,
+                                line_text
+                            )
+                            events.append(event)
+                            subtitle_index += 1
+
+                        # Start new line
+                        current_line_words = [word_obj]
+                        current_line_chars = word_length
+                        line_start_time = word_start
+                    else:
+                        current_line_words.append(word_obj)
+                        current_line_chars += word_length
+
+                # Process last line if any
+                if current_line_words:
+                    line_text = self._apply_keyword_highlighting(
+                        current_line_words,
+                        keywords_lower
+                    )
+                    line_end_time = current_line_words[-1].get('end', line_start_time + 1.0)
+
+                    event = self._format_ass_event(
+                        subtitle_index,
+                        line_start_time,
+                        line_end_time,
+                        subtitle_position,
+                        line_text
+                    )
+                    events.append(event)
+                    subtitle_index += 1
+
+            else:
+                # Fallback: use full segment text
+                text = segment.get('text', '').strip()
+                start = segment.get('start', 0)
+                end = segment.get('end', 0)
+
+                if text:
+                    lines = self._split_text_into_lines(text, max_chars_per_line)
+                    duration = end - start
+                    time_per_line = duration / len(lines) if lines else duration
+
+                    for i, line in enumerate(lines):
+                        line_start = start + (i * time_per_line)
+                        line_end = start + ((i + 1) * time_per_line)
+
+                        event = self._format_ass_event(
+                            subtitle_index,
+                            line_start,
+                            line_end,
+                            subtitle_position,
+                            line
+                        )
+                        events.append(event)
+                        subtitle_index += 1
+
+        return events
+
+
+    def _apply_keyword_highlighting(
+        self,
+        word_objects: List[Dict],
+        keywords_lower: List[str]
+    ) -> str:
+        r"""
+        Apply keyword highlighting with ASS color override tags.
+
+        Converts word objects to colored text using ASS override syntax:
+        - Regular words: Yellow (#FFFF00 in BGR = &H0000FFFF)
+        - Keyword matches: Magenta (#FF00FF in BGR = &HFF00FF)
+
+        Example:
+        Input: [{"word": "Hola"}, {"word": "mundo"}, {"word": "fascinante"}]
+               keywords: ["mundo"]
+        Output: "Hola {\c&HFF00FF&}mundo{\c} fascinante"
+                 Yellow  [Magenta]        Yellow
+        """
+        colored_words = []
+
+        for word_obj in word_objects:
+            word_text = word_obj.get('word', '').strip()
+
+            if not word_text:
+                continue
+
+            # Check if word matches any keyword (case-insensitive)
+            if word_text.lower() in keywords_lower:
+                # Magenta color: &HFF00FF (BGR format)
+                colored = f"{{\\c&HFF00FF&}}{word_text}{{\\c}}"
+            else:
+                # Normal text (yellow default will be applied by style)
+                colored = word_text
+
+            colored_words.append(colored)
+
+        return " ".join(colored_words)
+
+
+    def _format_ass_event(
+        self,
+        index: int,
+        start_time: float,
+        end_time: float,
+        style_name: str,
+        text: str
+    ) -> str:
+        """
+        Format an ASS Dialogue event line.
+
+        Args:
+            index: Subtitle sequence number (for reference)
+            start_time: Start time in seconds
+            end_time: End time in seconds
+            style_name: Name of the style to use (must exist in [V4+ Styles])
+            text: Dialogue text (may contain ASS override tags)
+
+        Returns:
+            Complete Dialogue line ready to write to ASS file
+        """
+        start_str = self._seconds_to_ass_time(start_time)
+        end_str = self._seconds_to_ass_time(end_time)
+
+        # Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+        dialogue = f"Dialogue: 0,{start_str},{end_str},{style_name},,0,0,0,,{text}\n"
+        return dialogue
+
+
+    def _seconds_to_ass_time(self, seconds: float) -> str:
+        r"""
+        Convert seconds to ASS time format (H:MM:SS.CC).
+
+        Args:
+            seconds: Time in seconds (float)
+
+        Returns:
+            String in ASS format (e.g., "0:00:02.50")
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+        # Round centiseconds to avoid precision issues
+        centisecs = round((seconds % 1) * 100) % 100
+
+        return f"{hours}:{minutes:02d}:{secs:02d}.{centisecs:02d}"

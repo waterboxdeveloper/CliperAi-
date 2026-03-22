@@ -344,13 +344,246 @@ subtitle_position = prompt.ask(
 )
 ```
 
-### Success Criteria
+---
 
-✅ All 3 positions available and tested
-✅ All subtitles render in yellow (8px)
-✅ Multicolor support documented and working
-✅ CLI asks for position preference
-✅ No performance impact from ASS rendering
+## Multicolor Implementation: SRT → ASS Conversion (Phase 3b)
+
+### Decision: Option B - Generate ASS Directly in subtitle_generator.py
+
+**Why B instead of A (runtime conversion)?**
+
+| Aspect | A: Runtime Conversion | B: Direct ASS Generation |
+|--------|----------------------|--------------------------|
+| **When conversion happens** | During export (per clip) | During transcription (once) |
+| **Performance impact** | Per-clip overhead | Zero overhead at export |
+| **File storage** | SRT only (smaller) | ASS only (slightly larger) |
+| **Complexity** | Simpler initial code | Better architecture |
+| **Flexibility** | Dynamic (can change per export) | Static (baked into file) |
+
+**Why "greater initial complexity" is misleading:**
+- B is NOT more complex, just different
+- A requires regex parsing + tag insertion per export (repeated work)
+- B requires understanding ASS format upfront, but clean afterwards
+- Example: 30 clips × 10 exports = 300 conversions (A) vs 30 conversions (B)
+
+### ASS Format vs SRT: What Changes?
+
+**SRT Format (Current):**
+```
+1
+00:00:00,000 --> 00:00:02,500
+La inteligencia artificial es fascinante
+```
+
+**ASS Format (Proposed):**
+```
+[Script Info]
+Title: Clip Subtitles
+ScriptType: v4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, ...
+Style: Default,Arial,8,&H0000FFFF,&H00000000,...
+
+[Events]
+Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:02.50,Default,,0,0,0,,La inteligencia {\c&HFF00FF&}artificial{\c} es fascinante
+```
+
+**Key Differences:**
+1. **Header metadata** - Styling info baked in (fonts, colors, positions)
+2. **Override tags** - `{\c&HBBGGRR&}text{\c}` for per-word color changes
+3. **Larger file size** - ~2-3KB per clip (negligible for video export)
+4. **One-time generation** - All styling decided at subtitle creation
+
+### Zero Export Overhead Explanation
+
+**Current flow (SRT):**
+```
+Export: Read SRT → Pass to ffmpeg
+        ffmpeg applies style via -vf filter (fontsize, color, positioning)
+        Result: Styled video
+```
+
+**New flow (ASS):**
+```
+Export: Read ASS → Pass to ffmpeg
+        ffmpeg applies style via ASS metadata (fontsize, color, positioning)
+        Result: Styled video
+```
+
+**Why no overhead?**
+- FFmpeg does styling work EITHER WAY
+- Whether style info comes from `-vf filter` or ASS file = same CPU
+- ASS actually slightly FASTER (no filter parsing needed)
+- Difference: Negligible (<1% export time)
+
+### Implementation: What subtitle_generator.py Must Do
+
+**Current (SRT generation):**
+```python
+def generate_srt_from_transcript(self, transcript, output_path):
+    srt_lines = []
+    for segment in transcript['segments']:
+        srt_lines.append(f"{sequence}\n{timestamp}\n{text}\n")
+
+    with open(output_path, 'w') as f:
+        f.write("\n".join(srt_lines))
+    return output_path
+```
+
+**New (ASS generation):**
+```python
+def generate_ass_from_transcript(
+    self,
+    transcript,
+    output_path,
+    subtitle_position: str = "bottom",  # bottom, middle, very_high
+    emphasis_keywords: Optional[List[str]] = None  # Words to highlight
+):
+    """
+    Generate ASS file with:
+    1. Header with style metadata (font, size, color, position)
+    2. Events with word-level coloring (keyword emphasis)
+
+    Args:
+        transcript: WhisperX output with word timestamps
+        output_path: Path to .ass file
+        subtitle_position: Position of subtitles on screen
+        emphasis_keywords: Words to highlight in different color
+
+    Returns:
+        Path to generated ASS file
+    """
+
+    # Build ASS header with positioning info
+    header = f"""[Script Info]
+Title: Clip Subtitles
+...
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, ...
+Style: {subtitle_position},Arial,8,&H0000FFFF,&H00000000,0,0,{margin_v},,
+"""
+
+    # Build events with word-level coloring
+    events = []
+    for segment in transcript['segments']:
+        # Split by words, apply color to emphasis_keywords
+        colored_text = apply_keyword_highlighting(
+            segment['text'],
+            emphasis_keywords,
+            color_default="&H0000FFFF",  # Yellow
+            color_emphasis="&HFF00FF"     # Magenta
+        )
+
+        dialogue = f"Dialogue: 0,{start},{end},Default,,0,0,0,,{colored_text}"
+        events.append(dialogue)
+
+    # Write complete ASS file
+    with open(output_path, 'w') as f:
+        f.write(header)
+        f.write("[Events]\n")
+        for event in events:
+            f.write(event + "\n")
+
+    return output_path
+```
+
+### Per-Word Coloring: How It Works
+
+**Input:**
+```python
+text = "La inteligencia artificial es fascinante"
+keywords = ["artificial"]
+```
+
+**Processing:**
+```python
+def apply_keyword_highlighting(text, keywords, color_default, color_emphasis):
+    words = text.split()
+    colored_words = []
+
+    for word in words:
+        if word.lower() in keywords:
+            # Wrap in color override tag
+            colored = f"{{\\c&H{color_emphasis}&}}{word}{{\\c}}"
+        else:
+            colored = word
+        colored_words.append(colored)
+
+    return " ".join(colored_words)
+
+# Output:
+"La inteligencia {\c&HFF00FF&}artificial{\c} es fascinante"
+```
+
+**FFmpeg rendering:**
+```
+"La inteligencia" → Yellow
+"artificial" → Magenta (emphasis)
+"es fascinante" → Yellow (back to default)
+```
+
+### Files to Modify
+
+| File | Change | Effort | Notes |
+|------|--------|--------|-------|
+| `src/subtitle_generator.py` | Add `generate_ass_from_transcript()` method | Medium | New method, keep SRT for backward compat |
+| `src/subtitle_generator.py` | Add `apply_keyword_highlighting()` helper | Low | Pure string manipulation |
+| `src/video_exporter.py` | Accept `.ass` files in addition to `.srt` | Low | Just pass filename to ffmpeg |
+| `cliper.py` | Add keyword input for emphasis (optional) | Low | Future: `--emphasis-keywords "word1,word2"` |
+| `models/subtitle_schemas.py` | Add `SubtitleConfig` with position + keywords | Low | Pydantic validation |
+| `tests/test_ass_generation.py` | NEW - Validate ASS format, color tags | Medium | Comprehensive testing |
+
+### Migration Path (Non-Breaking)
+
+**Phase 1 (Now):**
+- Add `generate_ass_from_transcript()` as new method
+- Keep SRT generation (backward compatible)
+- CLI can choose: "SRT only" vs "ASS with multicolor"
+
+**Phase 2 (Future):**
+- Make ASS default for all new clips
+- Automatically convert old SRT files to ASS
+- Deprecate SRT-only workflow
+
+**Phase 3 (Later):**
+- Remove SRT generation (if no users need it)
+
+### Coloring Options: Flexibility Example
+
+```python
+# Basic: Single emphasis color (magenta for keywords)
+generate_ass_from_transcript(
+    transcript,
+    output_path="clip.ass",
+    subtitle_position="bottom",
+    emphasis_keywords=["AICDMX", "inteligencia"]
+)
+
+# Advanced: Custom colors per keyword (future)
+generate_ass_from_transcript(
+    transcript,
+    output_path="clip.ass",
+    subtitle_position="middle",
+    keyword_colors={
+        "AICDMX": "&H00FF00",      # Green (hashtag)
+        "inteligencia": "&HFF00FF",  # Magenta (key concept)
+        "fascinante": "&H0000FF"     # Red (emotion)
+    }
+)
+```
+
+### Success Criteria (Phase 3b)
+
+✅ ASS files generated correctly with ASS header + styling metadata
+✅ Subtitle position baked into ASS (no ffmpeg filter needed)
+✅ Per-word color highlighting works (keywords in different color)
+✅ File size impact negligible (~2-3KB per clip)
+✅ Export performance identical to SRT (zero overhead)
+✅ Backward compatible: Old clips still work
+✅ Tests validate ASS format syntax + color tag parsing
 
 ---
 
