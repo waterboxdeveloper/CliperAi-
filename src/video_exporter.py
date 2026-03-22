@@ -69,7 +69,7 @@ class VideoExporter:
         video_name: Optional[str] = None,
         add_subtitles: bool = False,
         transcript_path: Optional[str] = None,
-        subtitle_style: str = "default",
+        subtitle_style: str = "bottom",
         organize_by_style: bool = False,
         clip_styles: Optional[Dict[int, str]] = None,
         # Face tracking parameters (PASO3)
@@ -92,7 +92,7 @@ class VideoExporter:
             video_name: Nombre base para los archivos (default: nombre del video)
             add_subtitles: Si True, quema subtítulos en el video
             transcript_path: Ruta al archivo de transcripción (requerido si add_subtitles=True)
-            subtitle_style: Estilo de subtítulos ("default", "bold", "yellow")
+            subtitle_style: Posición de subtítulos ("bottom", "middle", "very_high") - todos 8px amarillo
             organize_by_style: Si True, organiza clips en subcarpetas por estilo
             clip_styles: Dict mapping clip_id → style ("viral", "educational", "storytelling")
             enable_face_tracking: Si True, usa detección de rostros para reencuadre dinámico (9:16 only)
@@ -177,7 +177,7 @@ class VideoExporter:
         aspect_ratio: Optional[str] = None,
         add_subtitles: bool = False,
         transcript_path: Optional[str] = None,
-        subtitle_style: str = "default",
+        subtitle_style: str = "bottom",
         enable_face_tracking: bool = False,
         face_tracking_strategy: str = "keep_in_frame",
         face_tracking_sample_rate: int = 3,
@@ -386,82 +386,57 @@ class VideoExporter:
             return None
 
 
-    def _get_subtitle_filter(self, subtitle_path: str, style: str = "default") -> str:
+    def _get_subtitle_filter(self, subtitle_path: str, style: str = "bottom") -> str:
         """
         Genero el filtro de ffmpeg para quemar subtítulos en el video
 
         Args:
             subtitle_path: Ruta al archivo SRT (escapada para ffmpeg)
-            style: Estilo de subtítulos ("default", "bold", "yellow", "tiktok")
+            style: Posición de subtítulos ("bottom", "middle", "very_high") - todos 8px amarillo
 
         Returns:
             String de filtro para ffmpeg
         """
-        # Estilos predefinidos para subtítulos
-        # TODOS con texto AMARILLO para máxima visibilidad
+        # Estilos predefinidos para subtítulos (Phase 3: UX Critical)
+        # TODOS: 8px, AMARILLO (#FFFF00), sin shadow, sin outline
+        # 3 posiciones: bottom (default), middle, very_high
         styles = {
-            "default": {
-                "FontName": "Arial",
-                "FontSize": "18",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",  # Negro
-                "Outline": "2",
-                "Shadow": "1",
-                "Bold": "0"
-            },
-            "bold": {
-                "FontName": "Arial",
-                "FontSize": "22",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "2",
-                "Shadow": "1",
-                "Bold": "-1"
-            },
-            "yellow": {
-                "FontName": "Arial",
-                "FontSize": "20",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "2",
-                "Shadow": "1",
-                "Bold": "-1"
-            },
-            "tiktok": {
-                "FontName": "Arial",
-                "FontSize": "20",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "2",
-                "Shadow": "2",
-                "Bold": "-1",
-                "Alignment": "10"  # Centro arriba
-            },
-            "small": {
-                "FontName": "Arial",
-                "FontSize": "10",
-                "PrimaryColour": "&H0000FFFF",  # AMARILLO
-                "OutlineColour": "&H00000000",
-                "Outline": "1",
-                "Shadow": "1",
-                "Bold": "0",
-                "Alignment": "6",  # Centro medio-arriba
-                "MarginV": "100"
-            },
-            "tiny": {
+            "bottom": {
                 "FontName": "Arial",
                 "FontSize": "8",
                 "PrimaryColour": "&H0000FFFF",  # AMARILLO
                 "OutlineColour": "&H00000000",
-                "Outline": "1",
+                "Outline": "0",
                 "Shadow": "0",
                 "Bold": "0",
-                "Alignment": "6",  # Centro medio-arriba
-                "MarginV": "100"
+                "Alignment": "2",  # Bottom-center
+                "MarginV": "20"
+            },
+            "middle": {
+                "FontName": "Arial",
+                "FontSize": "8",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
+                "OutlineColour": "&H00000000",
+                "Outline": "0",
+                "Shadow": "0",
+                "Bold": "0",
+                "Alignment": "5",  # Middle-center
+                "MarginV": "0"
+            },
+            "very_high": {
+                "FontName": "Arial",
+                "FontSize": "8",
+                "PrimaryColour": "&H0000FFFF",  # AMARILLO
+                "OutlineColour": "&H00000000",
+                "Outline": "0",
+                "Shadow": "0",
+                "Bold": "0",
+                "Alignment": "8",  # Top-center
+                "MarginV": "10"
             }
         }
 
-        selected_style = styles.get(style, styles["default"])
+        selected_style = styles.get(style, styles["bottom"])
 
         # Construyo el filtro subtitles con el estilo
         # subtitles filter quema los subtítulos directamente en el video

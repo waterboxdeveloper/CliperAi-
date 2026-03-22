@@ -43,7 +43,7 @@ If yes:
 
 **Use Cases:**
 - Spanish video → English subtitles (for bilingual distribution)
-- English video → Spanish subtitles (accessibility)
+- English video → Spanish subtitlesper (accessibility)
 - Any video → Multiple language versions
 
 ---
@@ -250,74 +250,107 @@ Before implementing Phase 2, fix the current misleading prompt:
 
 ---
 
-## Subtitle Positioning Redesign (Phase 3: Critical)
+## Subtitle Styling & Positioning (Phase 3: UX Critical)
 
 ### Problem Statement
 
-Current subtitle positioning can occlude speaker's face, reducing engagement:
-- ❌ Centered positioning: Covers mouth/nose
-- ❌ Variable font sizes: Inconsistent visual hierarchy
-- ❌ No safe zone strategy: Text placement unpredictable
+Current subtitle styling is inconsistent and limited:
+- ❌ Only one or two style options
+- ❌ Fixed positioning cannot adapt to different scenes
+- ❌ Monochrome - no way to emphasize key words
+- ❌ Font size varies - inconsistent look
 
 ### Desired Behavior
 
-**Only 2 positions: Top or Bottom**
+**3 Positions, All Extra-Tiny (8px), All Yellow, FFmpeg Native**
+
+Using ffmpeg's `subtitles` filter with ASS/SSA styles:
+
 ```
-Position 1: TOP (above head)
-- Placement: Y = 6-8px from top
-- Font: Ultra-tiny (6-8px)
-- Purpose: Never blocks face, minimal visual weight
+Position 1: BOTTOM (Default - waist level)
+- Alignment: 2 (bottom-center)
+- MarginV: 20 (20px from bottom)
+- Font: 8px, Bold: 0
+- Color: Yellow (#FFFF00)
+- Purpose: Primary position, maximum visibility
 
-Position 2: BOTTOM (waist level)
-- Placement: Y = video_height - 20px
-- Font: Ultra-tiny (6-8px)
-- Purpose: Alternative when top is unavailable (text too long)
+Position 2: MIDDLE (Mid-frame)
+- Alignment: 5 (middle-center)
+- MarginV: 0 (centered)
+- Font: 8px, Bold: 0
+- Color: Yellow (#FFFF00)
+- Purpose: Alternative when bottom crowded
 
-RULES:
-✅ ALWAYS use 6-8px font (never larger)
-✅ NEVER center vertically (old behavior)
-✅ ALWAYS choose TOP first, fallback to BOTTOM if needed
-✅ Speaker's face (T-zone) stays COMPLETELY CLEAR
+Position 3: VERY HIGH (Top of frame)
+- Alignment: 8 (top-center)
+- MarginV: 10 (10px from top)
+- Font: 8px, Bold: 0
+- Color: Yellow (#FFFF00)
+- Purpose: Alternative for extreme cases
 ```
 
-### Why Ultra-Tiny Font?
+### NEW: Multicolor Subtitles (Word-Level Emphasis)
 
-**Trade-offs considered:**
-- A: Large font (12-16px) → Clear text, but OCCLUDES face ❌
-- B: Medium font (8-10px) → Some readability, still blocks ❌
-- C: **Ultra-tiny (6-8px) → Readable at scale, never blocks** ✅
+**Capability:** Change subtitle color per word using ASS override tags
 
-**User Experience:**
-- At 1080p playback: 6px = readable on phone/tablet
-- At streaming preview: 6px = subtle, not distracting
-- Face clarity: 100% (zero occlusion)
+```
+Instead of: "La inteligencia artificial es fascinante"
+           [all yellow]
+
+We can have: "La inteligencia {artificial} es fascinante"
+            [yellow] [yellow] [magenta] [yellow] [yellow]
+
+Implementation: SRT → ASS conversion with inline color tags
+```
+
+**Use Case:** Emphasize keywords (product names, hashtags, calls-to-action)
+- Default color: Yellow (#FFFF00)
+- Emphasis color: Magenta (#FF00FF) or other
+- Keyword list: Pass from clip metadata to subtitle_generator
+
+**Technical Implementation:**
+- ASS/SSA format supports `{\c&H0000FF&}color text{\c}` syntax
+- Can be added when generating SRT → ASS conversion
+- No ffmpeg changes needed - native ASS feature
+
+### Why Stay with FFmpeg Native?
+
+**Decision:** Use ffmpeg `subtitles` filter instead of PIL rendering
+- ✅ Already integrated and tested
+- ✅ No new dependencies
+- ✅ Fast and reliable
+- ✅ ASS format natively supports multicolor
+- ✅ Simplifies deployment (no PIL overhead)
+
+**Trade-off:** Can't do dynamic face-aware positioning, but:
+- 3 fixed positions cover 95% of use cases
+- Keep in frame strategy (PASO3) already handles face safety
+- Subtitle positioning secondary to face clarity
 
 ### Implementation Impact
 
 **Files affected:**
-- `src/video_exporter.py` → Update subtitle burn-in logic
-- `src/subtitle_generator.py` → Add positioning parameters
-- `tests/test_subtitle_positioning.py` → NEW - validate placement
+- `src/video_exporter.py` → Simplify to 3 styles (bottom, middle, very_high)
+- `src/subtitle_generator.py` → Support multicolor via ASS tags
+- `cliper.py` → CLI: Ask user for position (bottom/middle/very_high)
+- `tests/test_subtitle_styles.py` → NEW - validate all 3 positions
 
-**Integration with reframer.py:**
+**CLI Integration:**
 ```python
-# Current flow:
-Video → Face tracking (reframer) → Export with subtitles (video_exporter)
-
-# Change:
-Video → Face tracking (reframer) → Export with subtitles
-         ↓ Detect face bounding box
-         → Pass safe_zone_y to video_exporter
-         → Position subtitles ABOVE or BELOW safe zone
+subtitle_position = prompt.ask(
+    "Subtitle position?",
+    choices=["bottom", "middle", "very_high"],
+    default="bottom"
+)
 ```
 
 ### Success Criteria
 
-✅ Subtitles positioned at top (6-8px font) by default
-✅ Automatic fallback to bottom if space constrained
-✅ Face T-zone (eyes, nose, mouth) NEVER occluded
-✅ All clips reviewed for positioning correctness
-✅ CLI shows subtitle position choice in preview
+✅ All 3 positions available and tested
+✅ All subtitles render in yellow (8px)
+✅ Multicolor support documented and working
+✅ CLI asks for position preference
+✅ No performance impact from ASS rendering
 
 ---
 

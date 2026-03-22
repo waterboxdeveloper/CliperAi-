@@ -1702,44 +1702,38 @@ def opcion_exportar_clips(video: Dict, state_manager):
         default=True
     )
 
-    subtitle_style = "default"
+    subtitle_style = "bottom"  # Default position
     if add_subtitles:
         console.print()
-        console.print("[bold]Subtitle Style:[/bold]\n")
+        console.print("[bold]Subtitle Position (8px yellow):[/bold]\n")
 
         style_options = Table(show_header=False, box=None, padding=(0, 2))
         style_options.add_column(style="cyan")
         style_options.add_column(style="white")
         style_options.add_column(style="dim")
 
-        style_options.add_row("1", "Default (18px)", "White text, medium size")
-        style_options.add_row("2", "Bold (22px)", "Bold white text")
-        style_options.add_row("3", "Yellow (20px)", "Yellow text (classic)")
-        style_options.add_row("4", "TikTok (20px)", "Centered top")
-        style_options.add_row("5", "Small (10px)", "Very small, positioned higher")
-        style_options.add_row("6", "Tiny (8px)", "Extra tiny, positioned higher")
-        style_options.add_row("7", "Volver al menú anterior", "")
+        style_options.add_row("1", "Bottom", "Waist level (default)")
+        style_options.add_row("2", "Middle", "Center of frame")
+        style_options.add_row("3", "Very High", "Top of frame")
+        style_options.add_row("4", "Volver al menú anterior", "")
 
         console.print(style_options)
         console.print()
 
         style_choice = Prompt.ask(
-            "[cyan]Subtitle style[/cyan]",
-            choices=["1", "2", "3", "4", "5", "6", "7"],
-            default="5"  # Default a Small ahora
+            "[cyan]Subtitle position[/cyan]",
+            choices=["1", "2", "3", "4"],
+            default="1"
         )
 
         # Si elige volver
-        if style_choice == "7":
+        if style_choice == "4":
             return
 
         style_map = {
-            "1": "default",
-            "2": "bold",
-            "3": "yellow",
-            "4": "tiktok",
-            "5": "small",
-            "6": "tiny"
+            "1": "bottom",
+            "2": "middle",
+            "3": "very_high"
         }
 
         subtitle_style = style_map[style_choice]
@@ -1978,23 +1972,23 @@ def opcion_exportar_clips(video: Dict, state_manager):
                 style_options_edit.add_column(style="cyan")
                 style_options_edit.add_column(style="white")
 
-                styles = [("Default", "18px"), ("Bold", "22px"), ("Yellow", "20px"),
-                         ("TikTok", "20px"), ("Small", "10px"), ("Tiny", "8px")]
-                for i, (name, size) in enumerate(styles, 1):
-                    style_options_edit.add_row(str(i), f"{name} ({size})")
+                styles = [("Bottom", "8px yellow, waist level"),
+                         ("Middle", "8px yellow, center frame"),
+                         ("Very High", "8px yellow, top frame")]
+                for i, (name, desc) in enumerate(styles, 1):
+                    style_options_edit.add_row(str(i), f"{name} - {desc}")
 
                 console.print(style_options_edit)
                 console.print()
 
                 style_choice_edit = Prompt.ask(
-                    "[cyan]Style[/cyan]",
-                    choices=["1", "2", "3", "4", "5", "6"],
-                    default="5"
+                    "[cyan]Subtitle position[/cyan]",
+                    choices=["1", "2", "3"],
+                    default="1"
                 )
 
                 style_map_edit = {
-                    "1": "default", "2": "bold", "3": "yellow",
-                    "4": "tiktok", "5": "small", "6": "tiny"
+                    "1": "bottom", "2": "middle", "3": "very_high"
                 }
                 subtitle_style = style_map_edit[style_choice_edit]
 
