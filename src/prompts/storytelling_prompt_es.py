@@ -33,24 +33,24 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 ### Fórmulas que funcionan:
 
 1. **Hook de "antes vs después":**
-   - "[Opening words] Hace 2 años no sabía programar. Hoy trabajo en Google 🚀 #AICDMX"
-   - "[Opening words] Mi primer deploy en producción rompió todo. Esto aprendí #AICDMX"
-   - "[Opening words] De bootcamp a $150k/año: el camino que nadie te cuenta #AICDMX"
+   - "[Opening words] Hace 2 años no sabía programar. Hoy trabajo en Google 🚀 {mandatory_hashtags}"
+   - "[Opening words] Mi primer deploy en producción rompió todo. Esto aprendí {mandatory_hashtags}"
+   - "[Opening words] De bootcamp a $150k/año: el camino que nadie te cuenta {mandatory_hashtags}"
 
 2. **Hook de momento crucial:**
-   - "[Opening words] El día que mi CTO me dijo: 'Tu código es un desastre' #AICDMX"
-   - "[Opening words] 5 minutos antes de la demo, el servidor se cayó... #AICDMX"
-   - "[Opening words] Renuncié a mi trabajo sin tener otro. Esto pasó después #AICDMX"
+   - "[Opening words] El día que mi CTO me dijo: 'Tu código es un desastre' {mandatory_hashtags}"
+   - "[Opening words] 5 minutos antes de la demo, el servidor se cayó... {mandatory_hashtags}"
+   - "[Opening words] Renuncié a mi trabajo sin tener otro. Esto pasó después {mandatory_hashtags}"
 
 3. **Hook de journey personal:**
-   - "[Opening words] 200 rechazos después, esto es lo que cambió #AICDMX"
-   - "[Opening words] Cómo pasé de tutorials hell a mi primer freelance #AICDMX"
-   - "[Opening words] La pregunta de entrevista que me hizo dudar de todo #AICDMX"
+   - "[Opening words] 200 rechazos después, esto es lo que cambió {mandatory_hashtags}"
+   - "[Opening words] Cómo pasé de tutorials hell a mi primer freelance {mandatory_hashtags}"
+   - "[Opening words] La pregunta de entrevista que me hizo dudar de todo {mandatory_hashtags}"
 
 4. **Hook de lección aprendida:**
-   - "[Opening words] Perdí 3 meses en un proyecto que nadie usó. Lección cara #AICDMX"
-   - "[Opening words] Mi mentor me dijo algo que cambió mi carrera en tech #AICDMX"
-   - "[Opening words] El error de junior que cometí como senior (y cómo lo arreglé) #AICDMX"
+   - "[Opening words] Perdí 3 meses en un proyecto que nadie usó. Lección cara {mandatory_hashtags}"
+   - "[Opening words] Mi mentor me dijo algo que cambió mi carrera en tech {mandatory_hashtags}"
+   - "[Opening words] El error de junior que cometí como senior (y cómo lo arreglé) {mandatory_hashtags}"
 
 ### Características del estilo storytelling:
 
@@ -75,10 +75,10 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 - Depende de la universalidad de la experiencia
 
 **Hashtags de storytelling:**
-- SIEMPRE incluye #AICDMX (obligatorio)
+- SIEMPRE incluye {mandatory_hashtags} (obligatorio)
 - Usa hashtags de comunidad y journey
-- Ejemplos: #AICDMX #DevJourney, #AICDMX #TechStories, #AICDMX #CodeNewbie
-- Mezcla: #AICDMX + journey/comunidad
+- Ejemplos: {hashtag_example}
+- Mezcla: {mandatory_hashtags} + journey/comunidad
 - Evita hashtags puramente técnicos
 
 ### Ejemplos de copies storytelling (con code-switching):
@@ -87,24 +87,24 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 "Learn React with this tutorial #React"
 
 ✅ BIEN (journey personal, code-switching, con #AICDMX):
-"Pasé 6 meses aprendiendo React. Esto hubiera hecho diferente #DevJourney #AICDMX"
+"Pasé 6 meses aprendiendo React. Esto hubiera hecho diferente #DevJourney {mandatory_hashtags}"
 
 ❌ MAL (sin emoción, sin #AICDMX):
 "Implementé una nueva funcionalidad hoy"
 
 ✅ BIEN (momento de tensión, spanglish natural, con #AICDMX):
-"3am, deploy en prod, y todo se rompe. Mi primer all-nighter 💀 #DevLife #AICDMX"
+"3am, deploy en prod, y todo se rompe. Mi primer all-nighter 💀 #DevLife {mandatory_hashtags}"
 
 ❌ MAL (hook técnico sin historia, sin #AICDMX):
 "Cómo usar ganchos en React"
 
 ✅ BIEN (transformación, code-switching, con #AICDMX):
-"De odiar React hooks a no poder vivir sin ellos #React #AICDMX"
+"De odiar React hooks a no poder vivir sin ellos #React {mandatory_hashtags}"
 
 **Más ejemplos de storytelling con code-switching:**
-✅ "Mi primer bug en production afectó a 10k usuarios 😱 Lo que aprendí #AICDMX"
-✅ "Hace 2 años no sabía programar. Hoy trabajo en Google 🚀 #DevJourney #AICDMX"
-✅ "El día que mi CTO me dijo: 'Tu code es un desastre' #AICDMX"
+✅ "Mi primer bug en production afectó a 10k usuarios 😱 Lo que aprendí {mandatory_hashtags}"
+✅ "Hace 2 años no sabía programar. Hoy trabajo en Google 🚀 #DevJourney {mandatory_hashtags}"
+✅ "El día que mi CTO me dijo: 'Tu code es un desastre' {mandatory_hashtags}"
 
 ### Métricas objetivo para estilo storytelling:
 
@@ -137,12 +137,12 @@ Como solo tienes 150 chars, usa esta estructura comprimida:
 **[Setup + Conflicto + Promesa de resolución]**
 
 Ejemplos (con code-switching):
-- "Mi primer bug en prod afectó a 10k usuarios 😱 Lo que aprendí #AICDMX"
+- "Mi primer bug en prod afectó a 10k usuarios 😱 Lo que aprendí {mandatory_hashtags}"
   - Setup: primer bug en prod (prod = inglés técnico)
   - Conflicto: 10k usuarios afectados
   - Promesa: "lo que aprendí"
 
-- "De tutorials a mi primer freelance en 3 meses. El camino NO fue fácil #AICDMX"
+- "De tutorials a mi primer freelance en 3 meses. El camino NO fue fácil {mandatory_hashtags}"
   - Setup: journey de tutorials a freelance (términos técnicos)
   - Conflicto implícito: "NO fue fácil"
   - Promesa: ver qué pasó realmente

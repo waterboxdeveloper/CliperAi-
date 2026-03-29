@@ -201,49 +201,18 @@ langgraph>=0.6.11                ← Orquestación (se mantiene)
 
 ---
 
-## ❓ Preguntas Pendientes (Para tu decisión)
+## 🚀 Próximos Pasos
 
-**Necesito responder**:
+**Aprobación requerida**: ¿Proceder con Opción A (Claude Haiku)?
 
-1. **¿Qué prioridad tiene para CLIPER?**
-   - 🎯 **Calidad de copy** (excelente, profesional)
-   - ⚡ **Velocidad de procesamiento** (máximo latency)
-   - 💰 **Costo mínimo** (eficiencia)
+Si sí:
+1. Crear carpeta `todoCLAUDE/` con pasos detallados
+2. Implementar migración
+3. Testear y validar
 
-2. **¿Cuántos videos procesas típicamente?**
-   - 1-5 videos/semana
-   - 1-2 videos/día
-   - 3+ videos/día
-
-3. **Modelo preferido?**
-   - Claude 3.5 Haiku (más barato, suficiente)
-   - Claude 3.5 Sonnet (mejor balance, recomendado)
-   - Claude 3 Opus (máxima calidad, más caro)
-
----
-
-## 🚀 Plan de acción
-
-**Basado en tu aprobación**:
-
-✅ **OPCIÓN A: Migrar a Claude 3.5 Sonnet** (RECOMENDADO)
-- Mejor ratio costo-calidad para copies
-- Sin límites diarios (plan pro desbloqueado)
-- Tiempo: ~30 minutos
-- Próximo paso: Crear `todoCLAUDE-SONNET/` con pasos detallados
-
-✅ **OPCIÓN B: Migrar a Claude 3.5 Haiku**
-- Si presupuesto es crítico
-- 80% más barato pero algo menos capable
-- Tiempo: ~30 minutos
-- Próximo paso: Crear `todoCLAUDE-HAIKU/` con pasos detallados
-
-❌ **OPCIÓN C: Mantener Gemini + pagar upgrade**
-- No recomendado: inferior a Claude
-- Sigue teniendo límites diarios
-- Costo: $5/mes + pay-as-you-go
-
-**DECISIÓN**: ¿Cuál prefieres?
+Si no:
+- Evaluar Opción C (Gemini upgrade)
+- Implementar queue para procesar en lotes
 
 ---
 

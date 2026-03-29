@@ -115,10 +115,51 @@
 
 ### Subrama [3]: Generate AI Copies
 **Función:** `opcion_generar_copies()` línea 811
+
+**Flujo de Configuración:**
+
+```
+┌─────────────────────────────────────┐
+│ SELECT GEMINI MODEL:                │
+│  [1] gemini-2.5-flash (default)    │
+│  [2] gemini-1.5-pro                │
+│  [3] Back to menu                   │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────┐
+│ SELECT LLM PROVIDER:                │ ← [NUEVO - Dual LLM Support]
+│  [1] Gemini (requires GOOGLE_API)  │
+│  [2] Claude (requires ANTHROPIC_API)│
+│  [3] Back to menu                   │
+└──────────────┬──────────────────────┘
+               │
+               ▼
+┌──────────────────────────────────────┐
+│ Generating copies with LangGraph...  │
+│ Using: [Gemini|Claude]              │
+│                                      │
+│ ✓ Classification                    │
+│ ✓ Grouping by style                 │
+│ ✓ Generation (viral/edu/story)      │
+│ ✓ Validation                        │
+│ ✓ Quality analysis                  │
+└──────────────┬───────────────────────┘
+               │
+               ▼
+       RESULTS SHOWN:
+   • Total copies generated
+   • Avg engagement score
+   • Avg viral potential
+   • Distribution by style
+```
+
+**Detalles:**
 - **PASO2 Enhancement:** Extrae opening_words + speaker_hashtags
-- Ejecuta LangGraph + Gemini
-- Genera `output/{video_id}/copys/clips_copys.json`
-- Muestra métricas (engagement, viral potential)
+- **LLM Selection:** Elige entre Gemini (default) o Claude
+- **Execution:** Ejecuta LangGraph + LLM elegido
+- **Output:** Genera `output/{video_id}/copys/clips_copys.json`
+- **Metrics:** Muestra engagement, viral potential, distribution
 
 ### Subrama [4]: Export Clips
 **Función:** `opcion_exportar_clips()` línea 1160
@@ -382,7 +423,8 @@ logs/
 | Content Type | `opcion_descargar_video()` | Preset | Optimización para tipo |
 | Cleanup Options | `opcion_cleanup_project()` | 1-2 | Qué mantener/borrar |
 | Aspect Ratio | `opcion_exportar_clips()` | 16:9, 9:16, etc | Formato de salida |
-| Model Select | `opcion_generar_copies()` | gemini-2.5-flash/pro | API a usar |
+| Gemini Model | `opcion_generar_copies()` | gemini-2.5-flash/pro | Modelo Gemini |
+| LLM Provider | `opcion_generar_copies()` | Gemini/Claude | Qué LLM usar |
 
 ---
 
@@ -394,9 +436,10 @@ logs/
 3. Video selection (numeric)
 4. Confirmations (Y/N)
 5. Content type selection (numeric)
-6. Model selection (numeric)
-7. Aspect ratio selection (numeric)
-8. Delete confirmations (text: "DELETE ALL")
+6. Gemini model selection (numeric)
+7. LLM Provider selection (numeric) ← [NUEVO - Gemini vs Claude]
+8. Aspect ratio selection (numeric)
+9. Delete confirmations (text: "DELETE ALL")
 ```
 
 ---

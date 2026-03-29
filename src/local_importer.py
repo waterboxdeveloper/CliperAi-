@@ -206,8 +206,7 @@ class LocalVideoImporter:
             sm.register_video(
                 video_id=video_id,
                 filename=dest_path.name,
-                content_type="local_import",  # Marcar como importación local
-                source="local"  # Metadata extra
+                content_type="local_import"  # Marcar como importación local
             )
 
             logger.info(f"Registered in state: {video_id}")

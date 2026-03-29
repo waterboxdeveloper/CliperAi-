@@ -33,24 +33,24 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 ### Fórmulas que funcionan:
 
 1. **Hook de aprendizaje directo:**
-   - "[Opening words] 3 formas de optimizar React hooks que no conocías #AICDMX"
-   - "[Opening words] Cómo debuggear memory leaks en 5 minutos #AICDMX"
-   - "[Opening words] La diferencia entre async/await y Promises explicada simple #AICDMX"
+   - "[Opening words] 3 formas de optimizar React hooks que no conocías {mandatory_hashtags}"
+   - "[Opening words] Cómo debuggear memory leaks en 5 minutos {mandatory_hashtags}"
+   - "[Opening words] La diferencia entre async/await y Promises explicada simple {mandatory_hashtags}"
 
 2. **Hook de problema → solución:**
-   - "[Opening words] ¿Tu API es lenta? Esta técnica redujo latencia en 80% #AICDMX"
-   - "[Opening words] Cómo evité 3 horas de debugging con esta regla #AICDMX"
-   - "[Opening words] El error de TypeScript que todos cometemos (y cómo arreglarlo) #AICDMX"
+   - "[Opening words] ¿Tu API es lenta? Esta técnica redujo latencia en 80% {mandatory_hashtags}"
+   - "[Opening words] Cómo evité 3 horas de debugging con esta regla {mandatory_hashtags}"
+   - "[Opening words] El error de TypeScript que todos cometemos (y cómo arreglarlo) {mandatory_hashtags}"
 
 3. **Hook de lista o framework:**
-   - "[Opening words] 5 patrones de diseño que todo senior debe conocer #AICDMX"
-   - "[Opening words] La checklist de code review que uso en producción #AICDMX"
-   - "[Opening words] 4 principios de clean code con ejemplos reales #AICDMX"
+   - "[Opening words] 5 patrones de diseño que todo senior debe conocer {mandatory_hashtags}"
+   - "[Opening words] La checklist de code review que uso en producción {mandatory_hashtags}"
+   - "[Opening words] 4 principios de clean code con ejemplos reales {mandatory_hashtags}"
 
 4. **Hook de "aprende lo que yo aprendí":**
-   - "[Opening words] Lo que aprendí después de 100 entrevistas técnicas #AICDMX"
-   - "[Opening words] Migré 1M de usuarios a microservicios: esto NO funcionó #AICDMX"
-   - "[Opening words] Lessons learned: 2 años como tech lead #AICDMX"
+   - "[Opening words] Lo que aprendí después de 100 entrevistas técnicas {mandatory_hashtags}"
+   - "[Opening words] Migré 1M de usuarios a microservicios: esto NO funcionó {mandatory_hashtags}"
+   - "[Opening words] Lessons learned: 2 años como tech lead {mandatory_hashtags}"
 
 ### Características del estilo educational:
 
@@ -75,10 +75,10 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 - Prioriza utilidad sobre shock value
 
 **Hashtags educativos:**
-- SIEMPRE incluye #AICDMX (obligatorio)
+- SIEMPRE incluye {mandatory_hashtags} (obligatorio)
 - Usa hashtags de comunidades de aprendizaje
-- Ejemplos: #AICDMX #LearnToCode, #AICDMX #DevTips, #AICDMX #CodeNewbie
-- Mezcla: #AICDMX + nicho técnico + comunidad
+- Ejemplos: {hashtag_example}
+- Mezcla: {mandatory_hashtags} + nicho técnico + comunidad
 
 ### Ejemplos de copies educativos (con code-switching):
 
@@ -86,24 +86,24 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 "Learn about APIs #coding"
 
 ✅ BIEN (específico, promete valor, code-switching, con #AICDMX):
-"Cómo estructurar REST APIs que escalan a millones de requests #AICDMX"
+"Cómo estructurar REST APIs que escalan a millones de requests {mandatory_hashtags}"
 
 ❌ MAL (clickbait sin sustancia, sin #AICDMX):
 "Este truco de CSS te volará la mente 🤯"
 
 ✅ BIEN (promesa clara, code-switching, con #AICDMX):
-"3 propiedades CSS que reemplazan JavaScript (con ejemplos) #FrontendDev #AICDMX"
+"3 propiedades CSS que reemplazan JavaScript (con ejemplos) #FrontendDev {mandatory_hashtags}"
 
 ❌ MAL (hook débil, sin #AICDMX, traducciones forzadas):
 "Hoy hablo de pruebas en Python"
 
 ✅ BIEN (problema + solución, spanglish natural, con #AICDMX):
-"¿Tus tests tardan 10 minutos? pytest-xdist los reduce a 2 #Python #AICDMX"
+"¿Tus tests tardan 10 minutos? pytest-xdist los reduce a 2 #Python {mandatory_hashtags}"
 
 **Más ejemplos de code-switching educational:**
-✅ "Cómo debuggear memory leaks en React en 5 pasos #AICDMX"
-✅ "La diferencia entre async/await y Promises explicada simple #JavaScript #AICDMX"
-✅ "Por qué tu API es lenta: 3 técnicas de optimización #BackendDev #AICDMX"
+✅ "Cómo debuggear memory leaks en React en 5 pasos {mandatory_hashtags}"
+✅ "La diferencia entre async/await y Promises explicada simple #JavaScript {mandatory_hashtags}"
+✅ "Por qué tu API es lenta: 3 técnicas de optimización #BackendDev {mandatory_hashtags}"
 
 ### Métricas objetivo para estilo educational:
 

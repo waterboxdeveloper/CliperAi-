@@ -32,6 +32,7 @@ import operator
 
 from langgraph.graph import StateGraph, END
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_anthropic import ChatAnthropic
 from pydantic import ValidationError
 
 # Imports locales
@@ -44,6 +45,7 @@ from src.models.copy_schemas import (
 )
 from src.prompts import get_prompt_for_style
 from src.prompts.classifier_prompt import get_classifier_prompt
+from src.utils.prompt_injector import inject_channel_config
 from src.subtitle_generator import SubtitleGenerator
 
 
@@ -114,7 +116,8 @@ class CopysGenerator:
     def __init__(
         self,
         video_id: str,
-        model: Literal["gemini-2.0-flash-exp", "gemini-1.5-pro"] = "gemini-2.0-flash-exp",
+        model: Literal["gemini-2.0-flash-exp", "gemini-1.5-pro", "claude-3-5-sonnet-20241022"] = "gemini-2.0-flash-exp",
+        llm_provider: Literal["gemini", "claude"] = "gemini",
         max_attempts: int = 3
     ):
         """
@@ -122,11 +125,13 @@ class CopysGenerator:
 
         Args:
             video_id: ID del video (ej: "AI_CDMX_Live_Stream_gjPVlCHU9OM")
-            model: Modelo de Gemini a usar
+            model: Modelo a usar (gemini-2.0-flash-exp, gemini-1.5-pro, o claude-3-5-sonnet-20241022)
+            llm_provider: Qué LLM usar ("gemini" o "claude")
             max_attempts: Máximo de reintentos si calidad < 7.5
         """
         self.video_id = video_id
         self.model = model
+        self.llm_provider = llm_provider
         self.max_attempts = max_attempts
 
         # Paths
@@ -135,16 +140,37 @@ class CopysGenerator:
         self.copys_dir = self.output_dir / "copys"
         self.copys_file = self.copys_dir / "clips_copys.json"
 
-        # Inicializar LLM
-        self.llm = ChatGoogleGenerativeAI(
-            model=self.model,
-            temperature=0.8,  # Creatividad alta para copies
-            top_p=0.95,
-            top_k=40
-        )
+        # Inicializar LLM según provider
+        self.llm = self._create_llm()
 
         # Build graph
         self.graph = self._build_graph()
+
+    def _create_llm(self):
+        """
+        Crea el LLM según el provider especificado.
+
+        ¿Por qué una función separada?
+        - Lógica centralizada de inicialización
+        - Fácil de testear (puedes mockear el LLM)
+        - Fácil de extender (agregar más providers)
+
+        Returns:
+            ChatGoogleGenerativeAI o ChatAnthropic según self.llm_provider
+        """
+        if self.llm_provider == "claude":
+            return ChatAnthropic(
+                model="claude-3-5-sonnet-20241022",
+                temperature=0.8,  # Creatividad alta para copies
+                max_tokens=4096
+            )
+        else:  # default: gemini
+            return ChatGoogleGenerativeAI(
+                model=self.model,
+                temperature=0.8,  # Creatividad alta para copies
+                top_p=0.95,
+                top_k=40
+            )
 
 
     def _build_graph(self) -> StateGraph:
@@ -614,6 +640,15 @@ Responde SOLO con JSON válido (sin markdown):"""
         # Construir prompt con language-awareness
         full_prompt = get_prompt_for_style(style, language=language)
 
+        # Inyectar configuración de canal (hashtags, etc.)
+        # TODO: Cargar desde config/channels/{channel}.yaml en lugar de hardcodear
+        channel_config = {
+            "mandatory_hashtags": ["#AICDMX"],
+            "optional_hashtags_count": 1,
+            "hashtag_example": "#AICDMX #DevLife"
+        }
+        full_prompt = inject_channel_config(full_prompt, channel_config)
+
         # Procesar en batches de 5 clips para evitar timeouts
         BATCH_SIZE = 5
         all_copies = []
@@ -863,8 +898,9 @@ Responde SOLO con JSON válido (sin markdown):"""
                     if not copy.copy or len(copy.copy) < 20:
                         validation_errors.append(f"Clip {copy.clip_id}: copy muy corto")
 
-                    if '#AICDMX' not in copy.copy.upper():
-                        validation_errors.append(f"Clip {copy.clip_id}: falta #AICDMX")
+                    # REMOVIDO: Hardcoded #AICDMX check - usar configuración de canal en su lugar
+                    # if '#AICDMX' not in copy.copy.upper():
+                    #     validation_errors.append(f"Clip {copy.clip_id}: falta #AICDMX")
 
                 except Exception as e:
                     validation_errors.append(f"Clip {copy.clip_id}: {e}")
@@ -1151,22 +1187,25 @@ Responde SOLO con JSON válido (sin markdown):"""
 
 def generate_copys_for_video(
     video_id: str,
-    model: str = "gemini-2.0-flash-exp"
+    model: str = "gemini-2.0-flash-exp",
+    llm_provider: Literal["gemini", "claude"] = "gemini"
 ) -> Dict:
     """
     Helper function para usar desde CLI.
 
     Args:
         video_id: ID del video
-        model: Modelo de Gemini
+        model: Modelo a usar (default: gemini-2.0-flash-exp)
+        llm_provider: Qué LLM usar ("gemini" o "claude"). Default: "gemini"
 
     Returns:
         Dict con resultados
 
-    Ejemplo:
+    Ejemplo (Gemini):
         result = generate_copys_for_video("AI_CDMX_Live_Stream_gjPVlCHU9OM")
-        if result['success']:
-            print(f"✅ Guardado en: {result['output_file']}")
+
+    Ejemplo (Claude):
+        result = generate_copys_for_video("AI_CDMX_Live_Stream_gjPVlCHU9OM", llm_provider="claude")
     """
-    generator = CopysGenerator(video_id=video_id, model=model)
+    generator = CopysGenerator(video_id=video_id, model=model, llm_provider=llm_provider)
     return generator.generate()

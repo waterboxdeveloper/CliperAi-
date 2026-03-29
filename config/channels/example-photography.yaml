@@ -1,0 +1,43 @@
+# CLIPER Channel Configuration: Photography Channel
+# ==================================================
+# Example: Photography/composition tips channel
+
+name: "Photography Tips"
+description: "Photography and composition tips for visual creators"
+
+# Photography-specific branding
+mandatory_hashtags:
+  - "#Photography"
+  - "#Composition"
+
+optional_hashtags_count: 2
+hashtag_example: "#Photography #Composition #PhotographyTips"
+
+# Content rules adapted for photography
+content_rules:
+  min_copy_length: 20
+  max_copy_length: 150
+  emoji_usage: "medium"        # Less emojis, more professional
+  language: "en"               # English for international audience
+  code_switching: false        # Pure English
+
+# Photography-specific styles (less viral, more educational)
+default_styles:
+  - "educational"
+  - "storytelling"
+
+# Branding
+branding:
+  logo: "assets/logo.png"
+  logo_alt: "assets/logo-alt.png"
+  color_theme: "blue"          # Photography aesthetic
+  watermark_text: "Photography Tips"
+
+# Notes
+notes: |
+  This is an example configuration for a photography channel:
+  - Uses photography-specific hashtags
+  - English-only content (international audience)
+  - Focuses on educational and storytelling styles
+  - No code-switching (not a dev channel)
+  - More professional tone (fewer emojis)

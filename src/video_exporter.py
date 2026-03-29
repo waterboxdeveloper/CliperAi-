@@ -70,6 +70,7 @@ class VideoExporter:
         add_subtitles: bool = False,
         transcript_path: Optional[str] = None,
         subtitle_style: str = "bottom",
+        subtitle_emphasis_keywords: Optional[List[str]] = None,
         organize_by_style: bool = False,
         clip_styles: Optional[Dict[int, str]] = None,
         # Face tracking parameters (PASO3)
@@ -151,6 +152,7 @@ class VideoExporter:
                     add_subtitles=add_subtitles,
                     transcript_path=transcript_path,
                     subtitle_style=subtitle_style,
+                    subtitle_emphasis_keywords=subtitle_emphasis_keywords,
                     enable_face_tracking=enable_face_tracking,
                     face_tracking_strategy=face_tracking_strategy,
                     face_tracking_sample_rate=face_tracking_sample_rate,
@@ -178,6 +180,7 @@ class VideoExporter:
         add_subtitles: bool = False,
         transcript_path: Optional[str] = None,
         subtitle_style: str = "bottom",
+        subtitle_emphasis_keywords: Optional[List[str]] = None,
         enable_face_tracking: bool = False,
         face_tracking_strategy: str = "keep_in_frame",
         face_tracking_sample_rate: int = 3,
@@ -207,7 +210,8 @@ class VideoExporter:
                 clip_start=start_time,
                 clip_end=end_time,
                 output_path=str(subtitle_file),
-                subtitle_position=subtitle_style  # "bottom", "middle", or "very_high"
+                subtitle_position=subtitle_style,  # "bottom", "middle", or "very_high"
+                emphasis_keywords=subtitle_emphasis_keywords  # Multicolor support
             )
 
         video_to_process = video_path
@@ -279,17 +283,18 @@ class VideoExporter:
                     last_video_stream = "[v_filtered]"
                 
                 # Logo positioning (x:y offsets in pixels)
-                # top-left adjusted for TikTok: 20px left, 60px down to avoid status bar
+                # top-left adjusted for TikTok: 20px left, 200px down to avoid status bar + clearance
                 positions = {
                     "top-right": "W-w-20:20",
-                    "top-left": "20:60",  # Adjusted down for TikTok status bar
+                    "top-left": "20:200",  # Adjusted 200px down for TikTok (doubled from 100px)
                     "bottom-right": "W-w-20:H-h-20",
                     "bottom-left": "20:H-h-20"
                 }
                 pos_str = positions.get(logo_position, positions["top-left"])
-                
-                # Chain the overlay
-                filter_chains.append(f"{last_video_stream}[{logo_input_idx}:v]overlay={pos_str}[v_out]")
+
+                # Chain the overlay with proper scaling
+                # scale=iw*{logo_scale}:-1 scales logo to logo_scale% of video width, maintaining aspect ratio
+                filter_chains.append(f"[{logo_input_idx}:v]scale=iw*{logo_scale}:-1[logo_scaled];{last_video_stream}[logo_scaled]overlay={pos_str}[v_out]")
                 last_video_stream = "[v_out]"
                 
                 cmd.extend(["-filter_complex", ";".join(filter_chains), "-map", last_video_stream])
@@ -343,7 +348,7 @@ class VideoExporter:
 
         Args:
             position: Posición del logo ("top-right", "top-left", "bottom-right", "bottom-left").
-            scale: Escala del logo relativa al ancho del video (0.1 = 10%).
+            scale: Escala del logo relativa al ancho del video (0.1 = 10% del ancho).
 
         Returns:
             String del filtro para FFmpeg.
@@ -356,10 +361,11 @@ class VideoExporter:
         }
         pos = positions.get(position, positions["top-right"])
 
-        # El filtro escala el logo y luego lo superpone.
-        # [1:v] es el input del logo, se escala a (ancho_video * escala) y alto automático (-1).
-        # Luego, [0:v] (video principal) y [logo_scaled] se usan en el overlay.
-        return f"scale2ref=w=oh*mdar:h=ih*{scale}[logo_scaled][video];[video][logo_scaled]overlay={pos}"
+        # El filtro escala el logo basado en el ancho del video y luego lo superpone.
+        # scale=iw*{scale}:-1: Escala el logo al {scale}% del ancho del video (iw = input width)
+        # El "-1" mantiene el aspect ratio automáticamente
+        # Luego [video][logo_scaled] se usan en overlay para posicionar el logo
+        return f"[1:v]scale=iw*{scale}:-1[logo];[0:v][logo]overlay={pos}:format=auto[out]"
 
     def _get_aspect_ratio_filter(self, aspect_ratio: str) -> Optional[str]:
         """
@@ -396,10 +402,10 @@ class VideoExporter:
 
     def _get_subtitle_filter(self, subtitle_path: str, style: str = "bottom") -> str:
         """
-        Generate ffmpeg filter for ASS subtitles (Phase 3b: ASS format).
+        Generate ffmpeg filter for ASS subtitles (Phase 3b: ASS format with override tags).
 
         With ASS files, all styling (font, color, position) is embedded in the file.
-        No need for force_style parameter like with SRT.
+        Added support for per-word color highlighting using ASS override tags.
 
         Args:
             subtitle_path: Path to .ass file (escaped for ffmpeg)
@@ -407,11 +413,11 @@ class VideoExporter:
                    but styling is now in the ASS file itself
 
         Returns:
-            Simple ffmpeg filter string
+            FFmpeg filter string with ASS override tag support
         """
-        # With ASS format, styling info is in the file - no need for force_style
-        # FFmpeg will read positioning, colors, fonts directly from [V4+ Styles] section
-        subtitle_filter = f"subtitles='{subtitle_path}'"
+        # Enable ASS override tags for per-word coloring (e.g. {\c&HFF00FF&}word{\c})
+        # force_style='' with empty value preserves all ASS metadata including override tags
+        subtitle_filter = f"subtitles='{subtitle_path}':force_style=''"
 
         return subtitle_filter
 

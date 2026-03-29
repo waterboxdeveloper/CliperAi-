@@ -34,20 +34,20 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 ### Fórmulas que funcionan:
 
 1. **Hook de pregunta provocativa después de apertura:**
-   - "[Opening words] ¿Por qué nadie habla de esto en #TechTwitter? #AICDMX"
-   - "[Opening words] ¿Realmente necesitas un framework para...? 🤔 #AICDMX"
+   - "[Opening words] ¿Por qué nadie habla de esto en #TechTwitter? {mandatory_hashtags}"
+   - "[Opening words] ¿Realmente necesitas un framework para...? 🤔 {mandatory_hashtags}"
 
 2. **Hook de contradicción después de apertura:**
-   - "[Opening words] pero esto es más rápido 🚀 #AICDMX"
-   - "[Opening words] Olvida lo que sabes sobre #AI #AICDMX"
+   - "[Opening words] pero esto es más rápido 🚀 {mandatory_hashtags}"
+   - "[Opening words] Olvida lo que sabes sobre #AI {mandatory_hashtags}"
 
 3. **Hook de dato sorprendente después de apertura:**
-   - "[Opening words] Este bug afectó a 3M de usuarios y nadie lo notó 🤯 #AICDMX"
-   - "[Opening words] Un desarrollador de 19 años resolvió lo que Google no pudo #AICDMX"
+   - "[Opening words] Este bug afectó a 3M de usuarios y nadie lo notó 🤯 {mandatory_hashtags}"
+   - "[Opening words] Un desarrollador de 19 años resolvió lo que Google no pudo {mandatory_hashtags}"
 
 4. **Hook relatable después de apertura:**
-   - "[Opening words] Cuando tu código funciona en local pero no en prod 💀 #AICDMX"
-   - "[Opening words] POV: Llevas 6h debuggeando y el error era un typo #AICDMX"
+   - "[Opening words] Cuando tu código funciona en local pero no en prod 💀 {mandatory_hashtags}"
+   - "[Opening words] POV: Llevas 6h debuggeando y el error era un typo {mandatory_hashtags}"
 
 ### Características del estilo viral:
 
@@ -66,15 +66,15 @@ NO las parafrasees. Úsalas EXACTAMENTE como están. Esto es innegociable.
 - Identifica los clips con potencial 9+ (estos son oro)
 
 **Hashtags virales:**
-- SIEMPRE incluye #AICDMX (obligatorio)
+- SIEMPRE incluye {mandatory_hashtags} (obligatorio)
 - Usa trending topics actuales
-- Mezcla: #AICDMX + nicho (específico) + trending (general)
-- Ejemplos: #AICDMX #TechTwitter, #AICDMX #DevLife, #AICDMX #AIRevolution
+- Mezcla: {mandatory_hashtags} + nicho (específico) + trending (general)
+- Ejemplos: {hashtag_example}
 
 ### Ejemplo correcto (con opening words):
 
-✅ BIEN (opening words + hook fuerte, con #AICDMX):
-"La IA es revolucionaria. 3 formas en que cambió mi negocio en 3 meses 🚀 #AI #AICDMX"
+✅ BIEN (opening words + hook fuerte, con {mandatory_hashtags}):
+"La IA es revolucionaria. 3 formas en que cambió mi negocio en 3 meses 🚀 #AI {hashtag_example}"
 - Opening words: "La IA es revolucionaria" (del speaker)
 - Hook: "3 formas en que cambió..." (tu continuación)
 

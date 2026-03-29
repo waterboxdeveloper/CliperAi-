@@ -19,6 +19,7 @@ dependencies = [
     "rich>=14.2.0",
     "faster-whisper>=1.2.0",
     "langchain-google-genai>=2.1.12",
+    "langchain-anthropic>=0.1.0",
     "langgraph>=0.6.11",
     # Face reframing (PASO3)
     "opencv-python>=4.8.0",

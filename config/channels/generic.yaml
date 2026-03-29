@@ -1,0 +1,48 @@
+# CLIPER Channel Configuration: Generic Template
+# ==============================================
+# Copy and modify this file for your own channel
+
+name: "My Channel"
+description: "Description of your channel"
+
+# Branding - Define your mandatory hashtags (channel identifier)
+# These will be injected into prompts automatically
+mandatory_hashtags:
+  - "#YourBrand"
+  - "#YourCategory"
+
+# How many additional hashtags should be added per copy?
+optional_hashtags_count: 1
+
+# Example of what copies should look like (for prompt examples)
+hashtag_example: "#YourBrand #RelevantTopic"
+
+# Content rules
+content_rules:
+  min_copy_length: 20
+  max_copy_length: 150
+  emoji_usage: "high"          # or "low", "medium"
+  language: "es"               # or "en"
+  code_switching: true         # mix Spanish + English?
+
+# Which styles are relevant for your channel?
+default_styles:
+  - "viral"
+  - "educational"
+  - "storytelling"
+
+# Logo branding
+branding:
+  logo: "assets/logo.png"      # Main logo path
+  logo_alt: "assets/logo-alt.png"  # Alternative logo
+  color_theme: "cyan"          # Theme color
+  watermark_text: "YourBrand"
+
+# Notes
+notes: |
+  Edit this file to customize for your channel:
+  1. Change name and description
+  2. Set your mandatory_hashtags
+  3. Update hashtag_example
+  4. Choose language and styles
+  5. Update logo paths if needed

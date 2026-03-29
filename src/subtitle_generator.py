@@ -537,6 +537,37 @@ class SubtitleGenerator:
         return lines if lines else [text]
 
 
+    def extract_long_words(self, transcript: Dict, min_length: int = 8) -> List[str]:
+        """
+        Auto-detect important words (>N characters) from transcript for emphasis.
+
+        Rationale: Longer words are usually concepts/keywords worth highlighting.
+        Examples: "inteligencia" (12 chars), "revolucionaria" (14 chars), "#AICDMX" (7 chars)
+
+        Args:
+            transcript: WhisperX transcript dict
+            min_length: Minimum word length to consider (default 8)
+
+        Returns:
+            List of unique long words (deduplicated, case-sensitive)
+        """
+        long_words = []
+        seen = set()
+
+        for segment in transcript.get('segments', []):
+            text = segment.get('text', '')
+            words = text.split()
+
+            for word in words:
+                # Remove punctuation, keep hashtags intact
+                clean_word = word.strip('.,!?;:')
+
+                if len(clean_word) >= min_length and clean_word not in seen:
+                    long_words.append(clean_word)
+                    seen.add(clean_word)
+
+        return long_words
+
     # ==================== ASS FORMAT GENERATION (Phase 3b - Multicolor Support) ====================
 
     def generate_ass_for_clip(

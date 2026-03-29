@@ -1,0 +1,34 @@
+# CLIPER Channel Configuration: AICDMX
+# ====================================
+# Configuration for AICDMX community channel
+
+name: "AICDMX"
+description: "AI Community CDMX - Tech & AI content for Spanish-speaking developers"
+
+# Branding
+mandatory_hashtags:
+  - "#AICDMX"
+
+optional_hashtags_count: 1
+hashtag_example: "#AICDMX #DevLife"
+
+# Content rules
+content_rules:
+  min_copy_length: 20
+  max_copy_length: 150
+  emoji_usage: "high"
+  language: "es"
+  code_switching: true
+
+# Style preferences
+default_styles:
+  - "viral"
+  - "educational"
+  - "storytelling"
+
+# Logo branding
+branding:
+  logo: "assets/logo.png"
+  logo_alt: "assets/mpc.png"
+  color_theme: "cyan"
+  watermark_text: "AICDMX"

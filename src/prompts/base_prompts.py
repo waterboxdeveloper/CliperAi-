@@ -29,31 +29,31 @@ Tu trabajo es analizar clips de video (usando sus transcripciones) y generar:
 ### Formato del Copy:
 - **CRÍTICO: MAX 150 CARACTERES** (límite estricto de TikTok - cuenta CADA letra/espacio/emoji)
 - Mínimo 20 caracteres (suficiente contexto)
-- DEBE incluir SIEMPRE el hashtag #AICDMX (obligatorio, branding)
-- Además de #AICDMX, incluye 1-2 hashtags relevantes al contenido
+- DEBE incluir SIEMPRE estos hashtags: {mandatory_hashtags} (obligatorio, branding)
+- Además de {mandatory_hashtags}, incluye {optional_hashtag_count} hashtag(s) relevante(s) al contenido
 - Hashtags mezclados naturalmente, NO al final en bloque
 - Incluye emojis relevantes (1-2 max, no abuses)
 
 **⚠️ IMPORTANTE - Límite de 150 caracteres:**
 Si tu copy queda muy largo, PRIORIZA en este orden:
 1. Mantén el mensaje principal (hook + valor)
-2. SIEMPRE conserva #AICDMX (obligatorio)
-3. Reduce o elimina el segundo hashtag si es necesario
+2. SIEMPRE conserva {mandatory_hashtags} (obligatorio)
+3. Reduce o elimina el hashtag adicional si es necesario
 4. Mantén al menos 1 emoji si es relevante
 
 **Ejemplos con conteo exacto:**
 
 ✅ CORRECTO (148 caracteres):
-"¿Cansado de Q&As dominados? 🎤 Este truco asegura que TODAS las preguntas se respondan en tus meetups #TechEvents #AICDMX"
+"¿Cansado de Q&As dominados? 🎤 Este truco asegura que TODAS las preguntas se respondan en tus meetups #TechEvents {hashtag_example}"
 
 ❌ MUY LARGO (165 caracteres - RECHAZADO):
-"¿Estás cansado de que los Q&A sessions sean dominados por una sola persona? Este increíble truco asegura que todas las preguntas importantes sean respondidas #TechEvents #AICDMX"
+"¿Estás cansado de que los Q&A sessions sean dominados por una sola persona? Este increíble truco asegura que todas las preguntas importantes sean respondidas #TechEvents {hashtag_example}"
 
 ✅ CORRECTO (142 caracteres):
-"Mi breakup casi destruye mi chatbot project 💔. Esto es lo que aprendí sobre el emotional weight. #DevLife #AICDMX"
+"Mi breakup casi destruye mi chatbot project 💔. Esto es lo que aprendí sobre el emotional weight. #DevLife {hashtag_example}"
 
 ✅ CORRECTO con un solo hashtag (130 caracteres):
-"Para que tu #AI entienda el contexto, no solo basta con feelings. Necesitas cognitive instruction set #AICDMX"
+"Para que tu #AI entienda el contexto, no solo basta con feelings. Necesitas cognitive instruction set {mandatory_hashtags}"
 
 ### Idioma del Copy (MUY IMPORTANTE):
 - **Usa code-switching** (mezcla español + inglés) de forma natural
@@ -62,10 +62,10 @@ Si tu copy queda muy largo, PRIORIZA en este orden:
 - Audiencia: Developers latinos que hablan spanglish en tech
 
 **Ejemplos de code-switching correcto:**
-✅ "¿Sabías que el 90% de developers usan React hooks mal? 🤯 #AICDMX"
-✅ "Cuando tu code funciona en local pero no en prod 💀 #DevLife #AICDMX"
-✅ "Cómo debuggear memory leaks en 5 minutos #AICDMX"
-✅ "Mi primer bug en production afectó a 10k usuarios 😱 #AICDMX"
+✅ "¿Sabías que el 90% de developers usan React hooks mal? 🤯 {hashtag_example}"
+✅ "Cuando tu code funciona en local pero no en prod 💀 #DevLife {hashtag_example}"
+✅ "Cómo debuggear memory leaks en 5 minutos {mandatory_hashtags}"
+✅ "Mi primer bug en production afectó a 10k usuarios 😱 {hashtag_example}"
 
 **NO hagas esto:**
 ❌ Todo en inglés: "Did you know 90% of developers use React hooks wrong?"
@@ -129,18 +129,18 @@ Si tu copy queda muy largo, PRIORIZA en este orden:
 - Contradicción: "Todos usan Docker, pero..." (términos técnicos en inglés)
 
 ### Hashtags efectivos:
-- SIEMPRE incluye #AICDMX (obligatorio)
-- Mezcla de nicho + trending (1-2 adicionales)
-- Max 3-4 hashtags total (incluyendo #AICDMX)
+- SIEMPRE incluye {mandatory_hashtags} (obligatorio)
+- Mezcla de nicho + trending ({optional_hashtag_count} adicionales)
+- Max 3-4 hashtags total (incluyendo {mandatory_hashtags})
 - Integrados en el copy, NO al final
-- Ejemplo: "¿Por qué los modelos de #AI fallan? 🤔 #AICDMX"
+- Ejemplo: "¿Por qué los modelos de #AI fallan? 🤔 {mandatory_hashtags}"
 
 ### Lo que NO hacer:
 - ❌ No seas genérico: "Check this out! #video #content"
-- ❌ No pongas todos los hashtags al final: "Great content #AI #Tech #CDMX #Meetup"
+- ❌ No pongas todos los hashtags al final: "Great content #AI #Tech #Meetup"
 - ❌ No uses hooks débiles: "En este video..."
 - ❌ No excedas 150 caracteres
-- ❌ NO olvides #AICDMX (es obligatorio en TODOS los copies)
+- ❌ NO olvides {mandatory_hashtags} (es obligatorio en TODOS los copies)
 
 ## Responde SOLO con JSON válido.
 
@@ -161,7 +161,7 @@ JSON_FORMAT_INSTRUCTIONS = """
   "clips": [
     {
       "clip_id": 1,
-      "copy": "¿Por qué los Q&As se vuelven caóticos? 🤔 Esto lo cambia todo #AICDMX",
+      "copy": "¿Por qué los Q&As se vuelven caóticos? 🤔 Esto lo cambia todo {hashtag_example}",
       "metadata": {
         "sentiment": "curious_educational",
         "sentiment_score": 0.75,

@@ -204,20 +204,20 @@ class ClipCopy(BaseModel):
 
     # Validador 1: Truncar inteligentemente si > 150 chars
     # Validador 2: copy debe tener al menos 1 hashtag
-    # Validador 3: copy DEBE incluir #AICDMX (branding obligatorio)
+    # REMOVIDO: Validador 3 - #AICDMX ya no es obligatorio (user request)
     @field_validator('copy', mode='before')
     @classmethod
     def truncate_and_validate_copy(cls, v):
         """
         Valida y ajusta el copy para cumplir reglas:
         1. MAX 150 caracteres (límite TikTok)
-        2. DEBE tener hashtags
-        3. DEBE incluir #AICDMX (branding)
+        2. DEBE tener hashtags (al menos uno)
+        3. #AICDMX es OPCIONAL (branding preferido pero no obligatorio)
 
         Si Gemini genera > 150 chars, trunca INTELIGENTEMENTE:
         - Mantiene mensaje principal
-        - SIEMPRE conserva #AICDMX
-        - Elimina segundo hashtag si es necesario
+        - Preserva #AICDMX si está presente
+        - Elimina hashtags secundarios si es necesario
         """
         import re
 
@@ -226,27 +226,23 @@ class ClipCopy(BaseModel):
 
         # Si cabe, validar y retornar
         if len(v) <= 150:
-            # Validar hashtags
+            # Validar hashtags (al menos uno requerido)
             if '#' not in v:
                 raise ValueError('Copy must contain at least one hashtag')
-            if '#AICDMX' not in v.upper():
-                raise ValueError('Copy must include #AICDMX hashtag for branding')
+            # #AICDMX ya no es obligatorio - solo se valida presencia de hashtags
             return v
 
         # Si es muy largo, truncar inteligentemente
-        # Estrategia: Eliminar segundo hashtag (que NO sea AICDMX)
+        # Estrategia: Eliminar hashtags secundarios manteniendo al menos uno
 
         # Encontrar todos los hashtags
         hashtags = re.findall(r'#\w+', v)
 
-        # Identificar hashtags que NO son AICDMX
-        other_hashtags = [h for h in hashtags if h.upper() != '#AICDMX']
-
-        # Si hay más de un hashtag además de AICDMX, eliminar el último
-        if len(other_hashtags) > 0:
-            # Eliminar el último hashtag que NO sea AICDMX
-            last_other = other_hashtags[-1]
-            v_truncated = v.replace(last_other, '').strip()
+        # Si hay múltiples hashtags, intentar eliminar el último
+        if len(hashtags) > 1:
+            # Eliminar el último hashtag
+            last_hashtag = hashtags[-1]
+            v_truncated = v.replace(last_hashtag, '').strip()
 
             # Limpiar espacios dobles
             v_truncated = re.sub(r'\s+', ' ', v_truncated)
@@ -256,21 +252,12 @@ class ClipCopy(BaseModel):
                 return v_truncated
 
         # Si aún no cabe, truncar a 147 chars y agregar "..."
-        # Asegurarnos de que #AICDMX esté presente
-        if '#AICDMX' in v.upper():
-            # Buscar posición de #AICDMX
-            aicdmx_pos = v.upper().find('#AICDMX')
+        v = v[:147].rstrip() + '...'
 
-            # Si #AICDMX está cerca del final, mantenerlo
-            if aicdmx_pos > 130:
-                # Truncar antes de AICDMX y agregar
-                v = v[:aicdmx_pos].strip() + ' #AICDMX'
-            else:
-                # Truncar a 147 chars y verificar que AICDMX esté
-                v = v[:147] + '...'
-                if '#AICDMX' not in v.upper():
-                    # Reemplazar último hashtag con AICDMX
-                    v = re.sub(r'#\w+(?!.*#\w+)', '#AICDMX', v)
+        # Garantizar que hay al menos un hashtag
+        if '#' not in v:
+            # Si truncar eliminó todos los hashtags, agregar uno genérico
+            v = v[:140].rstrip() + ' #clip'
 
         return v[:150]  # Garantizar que nunca exceda 150
 

@@ -1321,41 +1321,71 @@ def opcion_generar_copies(video: Dict, state_manager):
     ))
     console.print()
 
-    # Selección de modelo
-    console.print("[bold]Selección de Modelo:[/bold]\n")
+    # ========== CHOOSE LLM PROVIDER (Gemini vs Claude) FIRST ==========
+    console.print()
+    console.print("[bold]Select LLM Provider:[/bold]\n")
+    llm_options = Table(show_header=False, box=None, padding=(0, 2))
+    llm_options.add_column(style="cyan")
+    llm_options.add_column(style="white")
+    llm_options.add_column(style="dim")
 
-    model_table = Table(show_header=False, box=None, padding=(0, 2))
-    model_table.add_column(style="cyan")
-    model_table.add_column(style="white")
-    model_table.add_column(style="dim")
+    llm_options.add_row("1", "Gemini", "Default - requires GOOGLE_API_KEY")
+    llm_options.add_row("2", "Claude", "Alternative - requires ANTHROPIC_API_KEY")
+    llm_options.add_row("3", "Volver al menú anterior", "")
 
-    model_table.add_row("1", "Gemini 2.5 Flash", "Tu modelo (recomendado)")
-    model_table.add_row("2", "Gemini 1.5 Pro", "Alternativa")
-    model_table.add_row("3", "Volver al menú anterior", "")
-
-    console.print(model_table)
+    console.print(llm_options)
     console.print()
 
-    model_choice = Prompt.ask(
-        "[cyan]Elige modelo[/cyan]",
+    llm_choice = Prompt.ask(
+        "[cyan]LLM Provider[/cyan]",
         choices=["1", "2", "3"],
         default="1"
     )
 
     # Si elige volver
-    if model_choice == "3":
+    if llm_choice == "3":
         return
 
-    # Intentar diferentes nombres de modelo para Gemini 2.5 Flash
-    model_map = {
-        "1": "gemini-2.5-flash",  # Nombre probable
-        "2": "gemini-1.5-pro"
-    }
+    llm_provider = "gemini" if llm_choice == "1" else "claude"
 
-    model = model_map[model_choice]
+    # ========== CHOOSE GEMINI MODEL (ONLY IF GEMINI) ==========
+    if llm_provider == "gemini":
+        console.print()
+        console.print("[bold]Select Gemini Model:[/bold]\n")
+        gemini_options = Table(show_header=False, box=None, padding=(0, 2))
+        gemini_options.add_column(style="cyan")
+        gemini_options.add_column(style="white")
+        gemini_options.add_column(style="dim")
+
+        gemini_options.add_row("1", "Gemini 2.5 Flash", "Faster (recommended)")
+        gemini_options.add_row("2", "Gemini 1.5 Pro", "More capable")
+        gemini_options.add_row("3", "Volver al menú anterior", "")
+
+        console.print(gemini_options)
+        console.print()
+
+        model_choice = Prompt.ask(
+            "[cyan]Modelo[/cyan]",
+            choices=["1", "2", "3"],
+            default="1"
+        )
+
+        # Si elige volver
+        if model_choice == "3":
+            return
+
+        model_map = {
+            "1": "gemini-2.5-flash",
+            "2": "gemini-1.5-pro"
+        }
+        model = model_map[model_choice]
+    else:
+        # Claude: usa el modelo default
+        model = "claude-3-5-sonnet-20241022"
 
     console.print()
-    console.print("[yellow]⚠️  This will use Gemini API (requires GOOGLE_API_KEY)[/yellow]")
+    api_key_warning = "GOOGLE_API_KEY" if llm_provider == "gemini" else "ANTHROPIC_API_KEY"
+    console.print(f"[yellow]⚠️  This will use {llm_provider.capitalize()} API (requires {api_key_warning})[/yellow]")
     console.print(f"[dim]Estimated time: ~1-2 minutes for {len(clips)} clips[/dim]\n")
 
     if not Confirm.ask("[cyan]Start AI copy generation?[/cyan]", default=True):
@@ -1365,13 +1395,15 @@ def opcion_generar_copies(video: Dict, state_manager):
 
     try:
         # Progress tracker para copy generation
-        progress = OperationProgress("Generating AI copies with LangGraph + Gemini", total_steps=100)
+        llm_display_name = llm_provider.capitalize()
+        progress = OperationProgress(f"Generating AI copies with LangGraph + {llm_display_name}", total_steps=100)
         progress.add_log(f"Video: {video['filename']}", "INFO")
         progress.add_log(f"Model: {model}", "INFO")
+        progress.add_log(f"LLM Provider: {llm_display_name}", "INFO")
         progress.update(5, "Initializing LangGraph pipeline...")
 
         if logger:
-            logger.info(f"Starting copy generation for video_id={video_id}, model={model}")
+            logger.info(f"Starting copy generation for video_id={video_id}, model={model}, llm_provider={llm_provider}")
 
         progress.add_log("Loading clips from metadata...", "PROGRESS")
         progress.update(10, "Loading clips...")
@@ -1382,7 +1414,8 @@ def opcion_generar_copies(video: Dict, state_manager):
 
         result = generate_copys_for_video(
             video_id=video_id,
-            model=model
+            model=model,
+            llm_provider=llm_provider
         )
 
         # Integrar logs del resultado en el progress
@@ -1443,12 +1476,13 @@ def opcion_generar_copies(video: Dict, state_manager):
             progress.show()
 
             console.print()
+            api_key_name = "GOOGLE_API_KEY" if llm_provider == "gemini" else "ANTHROPIC_API_KEY"
             console.print(Panel(
                 f"[red]Copy generation failed[/red]\n\n"
                 f"Error: {result.get('error', 'Unknown error')}\n\n"
                 f"Check the logs above for details.\n\n"
                 f"Possible causes:\n"
-                f"• GOOGLE_API_KEY not set\n"
+                f"• {api_key_name} not set\n"
                 f"• Model not available with your API key\n"
                 f"• API quota exceeded\n"
                 f"• Network issues",
@@ -1467,7 +1501,8 @@ def opcion_generar_copies(video: Dict, state_manager):
         progress.update(100, "Error ✗")
         progress.show()
         console.print(f"\n[red]Error: {e}[/red]")
-        console.print("[dim]Check that GOOGLE_API_KEY is set in your environment[/dim]")
+        api_key_name = "GOOGLE_API_KEY" if llm_provider == "gemini" else "ANTHROPIC_API_KEY"
+        console.print(f"[dim]Check that {api_key_name} is set in your environment[/dim]")
         if logger:
             logger.exception(f"Exception during copy generation: {e}")
 
@@ -1660,11 +1695,41 @@ def opcion_exportar_clips(video: Dict, state_manager):
         console.print(f"[green]✓[/green] Logo overlay enabled.")
 
         advanced_branding = Confirm.ask(
-            "\n[dim]Configure logo position & size?[/dim]",
+            "\n[dim]Configure logo selection, position & size?[/dim]",
             default=False
         )
         if advanced_branding:
-            logo_path = Prompt.ask("Path to logo file", default=logo_path)
+            # Logo selection menu
+            logo_dir = Path("assets")
+            available_logos = sorted(logo_dir.glob("*.png"))
+
+            if available_logos:
+                console.print("\n[bold]Select Logo:[/bold]\n")
+                logo_table = Table(show_header=False, box=None, padding=(0, 2))
+                logo_table.add_column(style="cyan")
+                logo_table.add_column(style="white")
+
+                # Add options for each logo
+                for idx, logo_file in enumerate(available_logos, 1):
+                    logo_name = logo_file.stem.replace("_", " ").title()
+                    logo_table.add_row(str(idx), logo_name)
+
+                # Add back option
+                logo_table.add_row(str(len(available_logos) + 1), "Keep default")
+
+                console.print(logo_table)
+                console.print()
+
+                logo_choice = Prompt.ask(
+                    "[cyan]Select logo[/cyan]",
+                    choices=[str(i) for i in range(1, len(available_logos) + 2)],
+                    default="1"
+                )
+
+                if int(logo_choice) <= len(available_logos):
+                    logo_path = str(available_logos[int(logo_choice) - 1])
+            else:
+                console.print("[yellow]⚠ No PNG logos found in assets folder[/yellow]")
 
             console.print("\n[bold]Logo Position:[/bold]\n")
             position_table = Table(show_header=False, box=None, padding=(0, 2))
@@ -1765,6 +1830,43 @@ def opcion_exportar_clips(video: Dict, state_manager):
         }
 
         subtitle_style = style_map[style_choice]
+
+        # Pregunto por palabras clave para enfatizar en magenta
+        console.print()
+        emphasis_input = Prompt.ask(
+            "[cyan]Keywords to highlight? (comma-separated, e.g. #AICDMX,inteligencia) [Press ENTER for auto-detect][/cyan]",
+            default=""
+        )
+
+        if emphasis_input.strip():
+            # User specified keywords manually
+            subtitle_emphasis_keywords = [kw.strip() for kw in emphasis_input.split(",") if kw.strip()]
+            console.print(f"[green]✓ Will highlight: {', '.join(subtitle_emphasis_keywords)}[/green]")
+        else:
+            # Auto-detect long words (>8 chars) from transcript
+            from src.subtitle_generator import SubtitleGenerator
+            subtitle_gen = SubtitleGenerator()
+
+            # Load transcript to extract long words
+            try:
+                with open(transcript_path, 'r', encoding='utf-8') as f:
+                    transcript_data = json.load(f)
+
+                auto_keywords = subtitle_gen.extract_long_words(transcript_data, min_length=8)
+
+                if auto_keywords:
+                    subtitle_emphasis_keywords = auto_keywords
+                    console.print(f"[green]✓ Auto-detect enabled - {len(auto_keywords)} keywords[/green]")
+                    console.print(f"[dim]Sample: {', '.join(auto_keywords[:5])}...[/dim]")
+                else:
+                    subtitle_emphasis_keywords = None
+                    console.print("[dim]No long words detected[/dim]")
+            except Exception as e:
+                logger.warning(f"Auto-detect failed: {e}")
+                subtitle_emphasis_keywords = None
+
+    else:
+        subtitle_emphasis_keywords = None
 
     # Pregunto si quiere organizar por estilo (si hay clasificaciones)
     if clip_styles:
@@ -1971,6 +2073,34 @@ def opcion_exportar_clips(video: Dict, state_manager):
             add_logo = Confirm.ask("[cyan]Add logo overlay?[/cyan]", default=add_logo)
 
             if add_logo:
+                # Logo selection menu
+                logo_dir = Path("assets")
+                available_logos = sorted(logo_dir.glob("*.png"))
+
+                if available_logos:
+                    console.print("\n[bold]Select Logo:[/bold]\n")
+                    logo_table_edit = Table(show_header=False, box=None, padding=(0, 2))
+                    logo_table_edit.add_column(style="cyan")
+                    logo_table_edit.add_column(style="white")
+
+                    for idx, logo_file in enumerate(available_logos, 1):
+                        logo_name = logo_file.stem.replace("_", " ").title()
+                        logo_table_edit.add_row(str(idx), logo_name)
+
+                    logo_table_edit.add_row(str(len(available_logos) + 1), "Keep current")
+
+                    console.print(logo_table_edit)
+                    console.print()
+
+                    logo_choice_edit = Prompt.ask(
+                        "[cyan]Select logo[/cyan]",
+                        choices=[str(i) for i in range(1, len(available_logos) + 2)],
+                        default="1"
+                    )
+
+                    if int(logo_choice_edit) <= len(available_logos):
+                        logo_path = str(available_logos[int(logo_choice_edit) - 1])
+
                 console.print("\n[bold]Logo Position:[/bold]\n")
                 logo_pos_table = Table(show_header=False, box=None, padding=(0, 2))
                 logo_pos_table.add_column(style="cyan")
@@ -2048,6 +2178,36 @@ def opcion_exportar_clips(video: Dict, state_manager):
                 }
                 subtitle_style = style_map_edit[style_choice_edit]
 
+                # Pregunto por palabras clave para enfatizar
+                console.print()
+                emphasis_input_edit = Prompt.ask(
+                    "[cyan]Keywords to highlight? (Press ENTER for auto-detect)[/cyan]",
+                    default=""
+                )
+
+                if emphasis_input_edit.strip():
+                    subtitle_emphasis_keywords = [kw.strip() for kw in emphasis_input_edit.split(",") if kw.strip()]
+                    console.print(f"[green]✓ Will highlight: {', '.join(subtitle_emphasis_keywords)}[/green]")
+                else:
+                    # Auto-detect long words
+                    from src.subtitle_generator import SubtitleGenerator
+                    subtitle_gen = SubtitleGenerator()
+
+                    try:
+                        with open(transcript_path, 'r', encoding='utf-8') as f:
+                            transcript_data = json.load(f)
+
+                        auto_keywords = subtitle_gen.extract_long_words(transcript_data, min_length=8)
+
+                        if auto_keywords:
+                            subtitle_emphasis_keywords = auto_keywords
+                            console.print(f"[green]✓ Auto-detect: {len(auto_keywords)} keywords[/green]")
+                        else:
+                            subtitle_emphasis_keywords = None
+                    except Exception as e:
+                        logger.warning(f"Auto-detect failed: {e}")
+                        subtitle_emphasis_keywords = None
+
         else:  # Volver a resumen (última opción)
             continue  # Volver al inicio del while loop
 
@@ -2089,6 +2249,7 @@ def opcion_exportar_clips(video: Dict, state_manager):
             add_subtitles=add_subtitles,
             transcript_path=transcript_path,
             subtitle_style=subtitle_style,
+            subtitle_emphasis_keywords=subtitle_emphasis_keywords,  # Multicolor support
             organize_by_style=organize_by_style,
             clip_styles=clip_styles,
             # PASO 3: Face tracking parameters
